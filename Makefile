@@ -19,11 +19,7 @@ directories.stamp:
 
 $(OBJS): directories.stamp
 
-install: python_code
-
-rpm: setup.py
-	@echo "About to make RPM"
-	$(PYTHON) ./setup.py bdist --format=rpm
+install: python_code 
 
 sql/$(EXTENSION)--$(EXTVERSION).sql: sql/$(EXTENSION).sql directories.stamp
 	cp $< $@
