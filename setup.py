@@ -1,7 +1,7 @@
 import subprocess
 import sys
 from setuptools import setup, find_packages, Extension
-
+import re
 
 import os
 from sys import platform
@@ -9,6 +9,8 @@ from setuptools.command.install import install
 from distutils.command.build import build
 
 # hum... borrowed from psycopg2
+
+
 def get_pg_config(kind, pg_config="pg_config"):
     p = subprocess.Popen([pg_config, '--%s' % kind], stdout=subprocess.PIPE)
     r = p.communicate()
@@ -19,12 +21,10 @@ def get_pg_config(kind, pg_config="pg_config"):
 
 include_dirs = [get_pg_config(d) for d in ("includedir", "pkgincludedir", "includedir-server")]
 
-multicorn_utils_module = Extension('multicorn._utils',
-        include_dirs=include_dirs,
-        extra_compile_args = ['-shared'],
-        sources=['src/utils.c'])
+multicorn_utils_module = Extension('multicorn._utils', include_dirs=include_dirs, extra_compile_args=['-shared'], sources=['src/utils.c'])
+pg_version = re.findall('(\d+\.\d+)\.\d', get_pg_config('version'))[0].replace('.', '')
 
-requires=[]
+requires = []
 
 if sys.version_info[0] == 2:
     if sys.version_info[1] == 6:
@@ -32,21 +32,22 @@ if sys.version_info[0] == 2:
     elif sys.version_info[1] < 6:
         sys.exit("Sorry, you need at least python 2.6 for Multicorn")
 
+
 class MulticornBuild(build):
-  def run(self):
-    # Original build
-    build.run(self)
-    r = subprocess.check_output(['/usr/bin/make', 'multicorn.so'])
-    r = r.strip().decode('utf8')
-    if not r:
-      raise Warning(p[2].readline())
+    def run(self):
+        # Original build
+        build.run(self)
+        r = subprocess.check_output(['/usr/bin/make', 'multicorn.so'])
+        r = r.strip().decode('utf8')
+        if not r:
+            raise Warning(p[2].readline())
     # After original build
 
 execfile('multicorn.control')
 
 
 setup(
-    name='multicorn',
+    name='multicorn'+pg_version+patch_version,
     # version='__VERSION__',
     version=default_version,
     author='Kozea',
@@ -57,6 +58,7 @@ setup(
     options={'bdist_rpm': {'post_install': 'rpm/post_install.sh',
                            'pre_uninstall': 'rpm/pre_uninstall.sh',
                            'requires': 'postgresql95-server',
+                           'provides': 'multicorn'+patch_version,
                            }},
     package_dir={'': 'python'},
     packages=['multicorn', 'multicorn.fsfdw'],
