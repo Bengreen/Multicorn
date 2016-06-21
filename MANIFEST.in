@@ -1,0 +1,4 @@
+include multicorn.control Makefile
+recursive-include src *.c *.h
+recursive-include sql *.sql
+recursive-include doc *
