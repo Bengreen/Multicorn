@@ -77,10 +77,25 @@ pkColumn = 0
 columnStructure = {'id': 0, 'adate': 1, 'atimestamp': 2, 'anumeric': 3, 'avarchar': 4}
 
 query_tests = [
-    ('''SELECT * FROM basetable''', [1, 2, 3, 4]),
-    ('''SELECT id,atimestamp FROM basetable''', [1, 2, 3, 4]),
-    ('''SELECT * FROM basetable WHERE avarchar IS NULL''', [4]),
-    ('''SELECT * FROM basetable WHERE avarchar IS NOT NULL''', [1, 2, 3])
+    ('''SELECT * FROM {0}''', {1, 2, 3, 4}),
+    ('''SELECT id,atimestamp FROM {0}''', {1, 2, 3, 4}),
+    ('''SELECT * FROM {0} WHERE avarchar IS NULL''', {4}),
+    ('''SELECT * FROM {0} WHERE avarchar IS NOT NULL''', {1, 2, 3}),
+    ('''SELECT * from {0} where adate > '1970-01-02'::date''', {1, 2, 3}),
+    ('''SELECT * from {0} where adate between '1970-01-01' and '1980-01-01' ''', {1, 3}),
+    ('''SELECT * from {0} where anumeric > 0''', {1, 2, 3}),
+    ('''SELECT * from {0} where avarchar not like '%%test' ''', {1, 2, 3}),
+    ('''SELECT * from {0} where avarchar like 'Another%%' ''', {2}),
+    ('''SELECT * from {0} where avarchar ilike 'Another%%' ''', {2, 3}),
+    ('''SELECT * from {0} where avarchar not ilike 'Another%%' ''', {1}),
+    ('''SELECT * from {0} where id in (1,2)''', {1, 2}),
+    ('''SELECT * from {0} where id not in (1, 2)''', {3, 4}),
+    ('''SELECT * from {0} order by avarchar''', [3, 2, 1, 4]),
+    ('''SELECT * from {0} order by avarchar desc''', [4, 1, 2, 3]),
+    ('''SELECT * from {0} order by avarchar desc nulls first''', [4, 1, 2, 3]),
+    ('''SELECT * from {0} order by avarchar desc nulls last''', [1, 2, 3, 4]),
+    ('''SELECT * from {0} order by avarchar nulls first''', [4, 3, 2, 1]),
+    ('''SELECT * from {0} order by avarchar nulls last''', [3, 2, 1, 4]),
 ]
 
 
@@ -88,27 +103,34 @@ def findRow(pk):
     return [row for row in testData if row[0] == pk][0]
 
 
+username = 'udvtest'
+password = 'pass'
+db = 'udv'
+
+
 class TestConnectionToPostgres(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         print 'setUpClass'
-        cls.engine = create_engine('postgresql://demo:demo@localhost:5432/demo', echo=True)
+        cls.engine = create_engine('postgresql://%s:%s@localhost:5432/%s' % (username, password, db), echo=True)
 
     @classmethod
     def tearDownClass(cls):
         print 'tearDownClass'
-        # self.close()
 
     def setUp(self):
         print "setUp"
         self.conn = self.engine.connect()
+        # Need to force a transaction and subsequent commit as sqlalchemy 'cleverly detects' commit type lanugage and auto triggers commits. But fails to see executing functions using SELECT as requiring a commit()
+        self.trans = self.conn.begin()
 
     def tearDown(self):
         print 'tearDown'
+        self.trans.commit()
         self.conn.close()
 
-    def query_execute(self, query_string, matching_pks):
-        cursor = self.conn.execute(query_string)
+    def query_execute(self, table_name, query_string, matching_pks):
+        cursor = self.conn.execute(query_string.format(table_name))
         foundRecords = []
 
         for row in cursor:
@@ -119,7 +141,10 @@ class TestConnectionToPostgres(unittest.TestCase):
                 for (columnReturned, columnDescription) in zip(row, cursor.keys()):
                     self.assertEqual(testRow[columnStructure[columnDescription]], columnReturned, msg="Mismatch in '%s':%s Expecting: %s Found: %s" % (row, columnDescription, testRow[columnStructure[columnDescription]], columnReturned))
 
-        self.assertEqual(len(set(matching_pks) ^ set(foundRecords)), 0, msg="Did not find the right matching records: found %s" % (foundRecords))
+        if type(matching_pks) is set:
+            self.assertFalse(set(matching_pks) ^ set(foundRecords), msg="Did not find the right matching records: found %s, with query: %s" % (foundRecords, query_string))
+        else:
+            self.assertFalse(cmp(matching_pks, foundRecords), msg="Did not find the right sequence of records: found %s, with query: %s" % (foundRecords, query_string))
 
     def test_connection_check(self):
         s = text('SELECT')
@@ -127,8 +152,8 @@ class TestConnectionToPostgres(unittest.TestCase):
 
         self.assertTrue(sqlReturn.returns_rows, msg="Return is %s" % (sqlReturn))
         self.assertEqual(len(sqlReturn.fetchall()), 1)
-        sqlReturn.close()
 
+    @pytest.mark.run(order=1)
     def test_create_table(self):
         s = text('''
           create table basetable (
@@ -141,63 +166,107 @@ class TestConnectionToPostgres(unittest.TestCase):
         ''')
         sqlReturn = self.conn.execute(s)
         self.assertFalse(sqlReturn.returns_rows, msg="Return is %s" % (sqlReturn))
-        sqlReturn.close()
 
-    @pytest.mark.run(after='test_create_table', before='test_insert_records')
-    def test_empty_table(self):
+    @pytest.mark.run(order=2)
+    def test_count_records_empty(self):
         returnRows = self.conn.execute(text('''SELECT count(*) FROM basetable''')).fetchall()
         self.assertEqual(returnRows[0][0], 0, msg="Was expecting 0 rows got %s" % (returnRows[0][0]))
 
-    @pytest.mark.run(after='test_create_table')
+    @pytest.mark.run(order=2)
     def test_insert_records(self):
         s = text('''
           insert into basetable (id, adate, atimestamp, anumeric, avarchar) values %s
           ''' % (', '.join([to_sql(entry) for entry in testData])))
         sqlReturn = self.conn.execute(s)
         self.assertFalse(sqlReturn.returns_rows, msg="Return is %s" % (sqlReturn))
-        sqlReturn.close()
 
-    @pytest.mark.run(after='test_insert_records')
-    def test_loaded_table(self):
+    @pytest.mark.run(order=3)
+    def test_count_records(self):
         returnRows = self.conn.execute(text('''SELECT count(*) FROM basetable''')).fetchall()
         self.assertEqual(returnRows[0][0], 4, msg="Was expecting 4 rows got %s" % (returnRows[0][0]))
-        # numRows = returnRows.scalar()
-        # self.assertEqual(numRows, len(testData), msg="Was expecting %s rows got %s" % (len(testData), numRows))
 
-    @pytest.mark.run(after='test_insert_records')
-    def test_select_queries(self):
+    @pytest.mark.run(order=4)
+    def test_select_queries_basetable(self):
+        table_name = 'basetable'
         for query_string, required_rows in query_tests:
-            with self.subTest(query_string=query_string, required_rows=required_rows):
-                self.query_execute(query_string, required_rows)
+            with self.subTest(table_name=table_name, query_string=query_string, required_rows=required_rows):
+                self.query_execute(table_name, query_string, required_rows)
 
-    # @pytest.mark.run(after='test_insert_records')
-    # def test_select_all(self):
-    #     self.query_execute('''SELECT * FROM basetable''', [1, 2, 3, 4])
-    #
-    # @pytest.mark.run(after='test_insert_records')
-    # def test_select_2columns(self):
-    #     self.query_execute('''SELECT id,atimestamp FROM basetable''', [1, 2, 3, 4])
-    #
-    # @pytest.mark.run(after='test_insert_records')
-    # def test_select_avarchar_null(self):
-    #     self.query_execute('''SELECT * FROM basetable WHERE avarchar IS NULL''', [4])
-    #
-    # @pytest.mark.run(after='test_insert_records')
-    # def test_select_avarchar_not_null(self):
-    #     self.query_execute('''SELECT * FROM basetable WHERE avarchar IS NOT NULL''', [1, 2, 3])
+    @pytest.mark.run(order=10)
+    def test_create_extension_multicorn(self):
+        sqlReturn = self.conn.execute('''CREATE EXTENSION multicorn''')
 
+    @pytest.mark.run(order=15)
+    def test_create_helper_function(self):
+        sqlReturn = self.conn.execute('''
+            create or replace function create_foreign_server() returns void as $block$
+              DECLARE
+                current_db varchar;
+              BEGIN
+                SELECT into current_db current_database();
+                EXECUTE $$
+                CREATE server multicorn_srv foreign data wrapper multicorn options (
+                    wrapper 'multicorn.sqlalchemyfdw.SqlAlchemyFdw',
+                    db_url 'postgresql://$$ || current_user || '@localhost/' || current_db || $$'
+                );
+                $$;
+              END;
+            $block$ language plpgsql
+            ''')
 
+    @pytest.mark.run(order=20)
+    def test_create_foreign_server(self):
+        sqlReturn = self.conn.execute('''SELECT create_foreign_server()''')
 
+    @pytest.mark.run(order=23)
+    def test_check_foreign_server(self):
+        sqlReturn = self.conn.execute('''select * from pg_foreign_server WHERE srvname='multicorn_srv' ''')
+        all_rows = sqlReturn.fetchall()
+        self.assertEqual(len(all_rows), 1, msg="There should be 1 row with name multicorn_srv")
 
+    @pytest.mark.run(order=25)
+    def test_create_foreign_table(self):
+        sqlReturn = self.conn.execute('''
+            create foreign table testalchemy (
+              id integer,
+              adate date,
+              atimestamp timestamp,
+              anumeric numeric,
+              avarchar varchar
+            ) server multicorn_srv options (
+              tablename 'basetable',
+              password '%s'
+            )
+            ''' % (password))
 
+    @pytest.mark.run(order=30)
+    def test_select_queries_testalchemy(self):
+        table_name = 'testalchemy'
+        for query_string, required_rows in query_tests:
+            with self.subTest(table_name=table_name, query_string=query_string, required_rows=required_rows):
+                self.query_execute(table_name, query_string, required_rows)
 
+    @pytest.mark.run(order=-10)
+    def test_delete_foreign_table(self):
+        sqlReturn = self.conn.execute('DROP FOREIGN TABLE testalchemy')
+        self.assertFalse(sqlReturn.returns_rows, msg="Return is %s" % (sqlReturn))
+
+    @pytest.mark.run(order=-7)
+    def test_delete_foreign_server(self):
+        sqlReturn = self.conn.execute('DROP SERVER multicorn_srv')
+        self.assertFalse(sqlReturn.returns_rows, msg="Return is %s" % (sqlReturn))
+
+    @pytest.mark.run(order=-5)
+    def test_drop_helper_function(self):
+        sqlReturn = self.conn.execute('''DROP function create_foreign_server()''')
+
+    @pytest.mark.run(order=-3)
+    def test_drop_extension_multicorn(self):
+        sqlReturn = self.conn.execute('''DROP EXTENSION multicorn''')
 
     @pytest.mark.run(order=-1)
     def test_delete_table(self):
         sqlReturn = self.conn.execute('DROP TABLE basetable')
         self.assertFalse(sqlReturn.returns_rows, msg="Return is %s" % (sqlReturn))
-        sqlReturn.close()
-
-
 
 # This is the end of the tests
