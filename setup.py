@@ -44,7 +44,7 @@ class MulticornBuild(build):
     # After original build
 
 execfile('multicorn.control')
-
+patch_version = '_ae'
 
 setup(
     name='multicorn'+pg_version+patch_version,
