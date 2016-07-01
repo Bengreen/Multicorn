@@ -32,27 +32,59 @@ import pytest
 # Need to ensure: pip install pytest-ordering
 
 
-# class TestStringMethods(unittest.TestCase):
+
 #
-#     def test_upper(self):
-#         self.assertEqual('foo'.upper(), 'FOO')
+# from sqlalchemy import create_engine
+# from sqlalchemy import Table, Column, Integer, String, MetaData, Date, DateTime, Numeric
+# from sqlalchemy.orm import mapper, sessionmaker
+# import datetime
 #
-#     def test_isupper(self):
-#         self.assertTrue('FOO'.isupper())
-#         self.assertFalse('Foo'.isupper())
 #
-#     def test_split(self):
-#         s = 'hello world'
-#         self.assertEqual(s.split(), ['hello', 'world'])
-#         # check that s.split fails when the separator is not a string
-#         with self.assertRaises(TypeError):
-#             s.split(2)
+# engine = create_engine('sqlite:///:memory:', echo=True)
+# metadata = MetaData()
+#
+# testdata_table = Table(
+#         'testdata', metadata,
+#         Column('id', Integer, primary_key=True),
+#         Column('adate', Date),
+#         Column('atimestamp', DateTime),
+#         Column('anumeric', Numeric),
+#         Column('avarchar', String)
+#         )
+# metadata.create_all(engine)
+#
+# setattr and getattr
+#
+# class Testdata(object):
+#     def __init__(self, id, adate, atimestamp, anumeric, avarchar):
+#         self.id = id
+#         self.adate = adate
+#         self.atimestamp = atimestamp
+#         self.anumeric = anumeric
+#         self.avarchar = avarchar
+#
+#     def __repr__(self):
+#         return "Testdata(%s)" % (self.id)
+#
+# mapper(Testdata, testdata_table)
+#
+# a_testpoint = Testdata(1, datetime.datetime.strptime('1980-01-01', '%Y-%m-%d').date(), datetime.datetime.strptime('1980-01-01  11:01:21.132912', '%Y-%m-%d  %H:%M:%S.%f'), 3.4, 'Test')
+# a_testpoint
+# a_testpoint.adate
+#
+# Session = sessionmaker(bind=engine)
+# session = Session()
+#
+# session.add(a_testpoint)
+# session.commit()
+
+
 
 testDataSrc = [
     (1, '1980-01-01', '1980-01-01  11:01:21.132912', 3.4, 'Test'),
     (2, '1990-03-05', '1998-03-02  10:40:18.321023', 12.2, 'Another Test'),
-    (3, '1972-01-02', '1972-01-02  16:12:54', 4000, 'another Test'),
-    (4, '1922-11-02', '1962-01-02  23:12:54', -3000, None)]
+    (3, '1972-01-02', '1972-01-02  16:12:54.000000', 4000, 'another Test'),
+    (4, '1922-11-02', '1962-01-02  23:12:54.000000', -3000, None)]
 
 
 def from_sqlish(input):
@@ -96,55 +128,64 @@ query_tests = [
     ('''SELECT * from {0} order by avarchar desc nulls last''', [1, 2, 3, 4]),
     ('''SELECT * from {0} order by avarchar nulls first''', [4, 3, 2, 1]),
     ('''SELECT * from {0} order by avarchar nulls last''', [3, 2, 1, 4]),
+    ('''SELECT count(*) FROM {0}''', 4),
 ]
 
 
 def findRow(pk):
     return [row for row in testData if row[0] == pk][0]
 
-
-username = 'udvtest'
-password = 'pass'
-db = 'udv'
-
-
+@pytest.mark.usefixtures("params")
 class TestConnectionToPostgres(unittest.TestCase):
+    '''
+    Create the test framework for running tests on posgresql
+    '''
+
     @classmethod
     def setUpClass(cls):
-        print 'setUpClass'
-        cls.engine = create_engine('postgresql://%s:%s@localhost:5432/%s' % (username, password, db), echo=True)
+        print 'Creating new engine for DB'
+        cls.engine = None
+        # cls.engine = create_engine('postgresql://%s:%s@localhost:5432/%s' % (username, password, db), echo=True)
 
     @classmethod
     def tearDownClass(cls):
-        print 'tearDownClass'
+        print 'Releasing DB (TODO)'
 
     def setUp(self):
-        print "setUp"
+        print 'Creating new engine for DB'
+        if not self.engine:
+            self.engine = create_engine('postgresql://%s:%s@localhost:5432/%s' % (self.username, self.password, self.db), echo=True)
+
+        print "Creating new DB connection"
         self.conn = self.engine.connect()
         # Need to force a transaction and subsequent commit as sqlalchemy 'cleverly detects' commit type lanugage and auto triggers commits. But fails to see executing functions using SELECT as requiring a commit()
         self.trans = self.conn.begin()
 
     def tearDown(self):
-        print 'tearDown'
         self.trans.commit()
         self.conn.close()
+        print 'Released DB connection'
 
     def query_execute(self, table_name, query_string, matching_pks):
         cursor = self.conn.execute(query_string.format(table_name))
-        foundRecords = []
-
-        for row in cursor:
-            with self.subTest(row=row):
-                testRow = findRow(row[pkColumn])
-                foundRecords.append(row[pkColumn])
-
-                for (columnReturned, columnDescription) in zip(row, cursor.keys()):
-                    self.assertEqual(testRow[columnStructure[columnDescription]], columnReturned, msg="Mismatch in '%s':%s Expecting: %s Found: %s" % (row, columnDescription, testRow[columnStructure[columnDescription]], columnReturned))
-
-        if type(matching_pks) is set:
-            self.assertFalse(set(matching_pks) ^ set(foundRecords), msg="Did not find the right matching records: found %s, with query: %s" % (foundRecords, query_string))
+        if type(matching_pks) is int:
+            returnVal = cursor.scalar()
+            self.assertEqual(returnVal, matching_pks, msg="Expecting %s, found: %s" % (matching_pks, returnVal))
         else:
-            self.assertFalse(cmp(matching_pks, foundRecords), msg="Did not find the right sequence of records: found %s, with query: %s" % (foundRecords, query_string))
+            foundRecords = []
+
+            for row in cursor:
+                with self.subTest(row=row):
+                    testRow = findRow(row[pkColumn])
+                    foundRecords.append(row[pkColumn])
+
+                    for (columnReturned, columnDescription) in zip(row, cursor.keys()):
+                        self.assertEqual(testRow[columnStructure[columnDescription]], columnReturned, msg="Mismatch in '%s':%s Expecting: %s Found: %s" % (row, columnDescription, testRow[columnStructure[columnDescription]], columnReturned))
+
+            if type(matching_pks) is set:
+                self.assertFalse(set(matching_pks) ^ set(foundRecords), msg="Did not find the right matching records: found %s, with query: %s" % (foundRecords, query_string))
+            else:
+                self.assertFalse(cmp(matching_pks, foundRecords), msg="Did not find the right sequence of records: found %s, with query: %s" % (foundRecords, query_string))
 
     def test_connection_check(self):
         s = text('SELECT')
@@ -237,7 +278,7 @@ class TestConnectionToPostgres(unittest.TestCase):
               tablename 'basetable',
               password '%s'
             )
-            ''' % (password))
+            ''' % (self.password))
 
     @pytest.mark.run(order=30)
     def test_select_queries_testalchemy(self):
