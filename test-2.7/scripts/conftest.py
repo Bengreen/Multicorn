@@ -27,3 +27,7 @@ def params(request):
     request.cls.username = request.config.getoption("--username")
     request.cls.password = request.config.getoption("--password")
     request.cls.db = request.config.getoption("--db")
+
+
+def pytest_cmdline_preparse(args):
+    args[:] = ["-k", "\"not UdvBaseTest\""] + args

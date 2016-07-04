@@ -30,9 +30,6 @@ except ImportError:
 
 import pytest
 # Need to ensure: pip install pytest-ordering
-
-
-
 #
 # from sqlalchemy import create_engine
 # from sqlalchemy import Table, Column, Integer, String, MetaData, Date, DateTime, Numeric
@@ -77,7 +74,6 @@ import pytest
 #
 # session.add(a_testpoint)
 # session.commit()
-
 
 
 testDataSrc = [
@@ -135,6 +131,7 @@ query_tests = [
 def findRow(pk):
     return [row for row in testData if row[0] == pk][0]
 
+
 @pytest.mark.usefixtures("params")
 class TestConnectionToPostgres(unittest.TestCase):
     '''
@@ -152,8 +149,8 @@ class TestConnectionToPostgres(unittest.TestCase):
         print 'Releasing DB (TODO)'
 
     def setUp(self):
-        print 'Creating new engine for DB'
         if not self.engine:
+            print 'Creating new engine for DB'
             self.engine = create_engine('postgresql://%s:%s@localhost:5432/%s' % (self.username, self.password, self.db), echo=True)
 
         print "Creating new DB connection"
@@ -165,6 +162,9 @@ class TestConnectionToPostgres(unittest.TestCase):
         self.trans.commit()
         self.conn.close()
         print 'Released DB connection'
+
+    def query_compare(self, ref_table, test_table, query_string, matching_type):
+        cursor = self.conn.execute(query_string.format(table_name))
 
     def query_execute(self, table_name, query_string, matching_pks):
         cursor = self.conn.execute(query_string.format(table_name))
@@ -214,7 +214,7 @@ class TestConnectionToPostgres(unittest.TestCase):
         self.assertEqual(returnRows[0][0], 0, msg="Was expecting 0 rows got %s" % (returnRows[0][0]))
 
     @pytest.mark.run(order=2)
-    def test_insert_records(self):
+    def test_load_records(self):
         s = text('''
           insert into basetable (id, adate, atimestamp, anumeric, avarchar) values %s
           ''' % (', '.join([to_sql(entry) for entry in testData])))
