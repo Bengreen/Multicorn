@@ -39,14 +39,18 @@ class MixedData:
     class QueryModelForeign(QueryBase, Base):
         __tablename__ = 'query_for'
 
+    # TODO: Make this into a property
+    @classmethod
+    def reference_table_name(cls):
+        return cls.QueryModelReference.__tablename__
+
+    # TODO: Make this into a property
+    @classmethod
+    def foreign_table_name(cls):
+        return cls.QueryModelForeign.__tablename__
+
     def create_tables(self, db_engine):
         Base.metadata.create_all(db_engine)
-
-    def load_single(self, session):
-        temp = self.QueryModelReference(avarchar="jones")
-        session.add(temp)
-        temp = self.QueryModelReference(avarchar="smith")
-        session.add(temp)
 
     def load(self, session, filename=os.path.dirname(__file__)+'/data.csv'):
         noneValue = '<None>'
