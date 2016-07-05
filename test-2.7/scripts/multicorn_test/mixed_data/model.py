@@ -7,6 +7,9 @@ from sqlalchemy.sql import text
 
 from sqlalchemy.ext.declarative import declarative_base
 
+import pytest
+
+
 Base = declarative_base()
 
 
@@ -26,9 +29,9 @@ class QueryModel(Base):
 # NEED TO REWRITE THIS BIT TO ALLOW NULL
 # http://stackoverflow.com/questions/11379300/csv-reader-behavior-with-none-and-empty-string
 
-class MixedData(object):
-    def create_table(self):
-        Base.metadata.create_all(self.engine)
+class MixedData:
+    def create_table(self, db_engine):
+        Base.metadata.create_all(db_engine)
 
     def load(self, filename=os.path.dirname(__file__)+'/data.csv'):
         with open(filename, 'rb') as csvfile:

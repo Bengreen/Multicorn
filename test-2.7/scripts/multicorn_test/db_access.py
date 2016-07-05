@@ -1,7 +1,6 @@
-import pytest
-
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+import pytest
 
 
 @pytest.fixture(scope="module")
@@ -37,28 +36,3 @@ def session(request, session_factory):
 
     request.addfinalizer(fin)
     return sess
-
-
-def test_noop(db_engine, username):
-    print(username)
-    assert 1
-
-
-def test_noop2(db_engine):
-    print("Noop2")
-    assert 1
-
-
-class TestBen:
-    @classmethod
-    def callme(cls):
-        print ("callme called!")
-
-    def test_method1(self, session):
-        result = session.execute('SELECT')
-        assert result.returns_rows, "should return rows"
-        assert result.rowcount == 1, "Should return 1 row"
-        assert len(result.keys()) == 0, "Should not return any columns"
-
-    def test_method2(self, session):
-        print ("test_method1 called")

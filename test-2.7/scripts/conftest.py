@@ -9,6 +9,9 @@ def pytest_addoption(parser):
 
 @pytest.fixture(scope='module')
 def username(request):
+    """
+    provide the username via a command line parameter to the test
+    """
     return request.config.getoption("--username")
 
 
@@ -29,8 +32,8 @@ def db(request):
 #     request.cls.db = request.config.getoption("--db")
 
 
-def pytest_cmdline_preparse(args):
-    """
-    Do not run built in tests from the test framework against the framework itself
-    """
-    args[:] = ["-k", "\"not MulticornBaseTest\""] + args
+# def pytest_cmdline_preparse(args):
+#     """
+#     Do not run built in tests from the test framework against the framework itself
+#     """
+#     args[:] = ["-k", "\"not MulticornBaseTest\""] + args
