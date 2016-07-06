@@ -20,9 +20,6 @@ class MulticornBaseTest:
 
     def copy_ref_to_for(self, session):
         self.exec_no_return(session, '''INSERT INTO {1} SELECT * from {0}'''.format(self.reference_table_name(), self.foreign_table_name()))
-        # query =
-        # returnVal = session.execute()
-        # assert not return_Val.returns_rows, "Not expecting any rows"
 
     def ordered_query(self, session, query):
         query_ref = query.format(self.reference_table_name())
