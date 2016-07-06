@@ -4,7 +4,8 @@ import pytest
 def pytest_addoption(parser):
     parser.addoption("--username", action="store", default="udvtest", help="username: username to access the DB")
     parser.addoption("--password", action="store", default="pass", help="password: password to access the DB")
-    parser.addoption("--db", action="store", default="udv", help="db: db to access the DB")
+    parser.addoption("--db", action="store", default="udv", help="db: db to access")
+    parser.addoption("--teardown", action="store", default="True", help="teardown: remove test elements at end of test")
 
 
 @pytest.fixture(scope='module')
