@@ -24,7 +24,7 @@ def session_factory(request, db_engine):
     return Session  # provide the fixture value
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def session(request, session_factory):
     print("Creating Session")
     sess = session_factory()

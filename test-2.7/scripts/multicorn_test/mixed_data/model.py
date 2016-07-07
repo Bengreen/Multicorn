@@ -16,11 +16,11 @@ import pytest
 Base = declarative_base()
 
 
-# TODO: NEED TO REWRITE THIS BIT TO ALLOW NULL
-# http://stackoverflow.com/questions/11379300/csv-reader-behavior-with-none-and-empty-string
-
-
 class MixedData:
+    # Constructor does not seem to be allowed in py.test
+    # def __init__(self):
+    #     print("Constructor")
+    #     super(MixedData, self).__init__()
 
     class QueryBase(object):
         id = Column(Integer, primary_key=True)
@@ -36,8 +36,8 @@ class MixedData:
     class QueryModelReference(QueryBase, Base):
         __tablename__ = 'query_ref'
 
-    class QueryModelForeign(QueryBase, Base):
-        __tablename__ = 'query_for'
+    # class QueryModelForeign(QueryBase, Base):
+    #     __tablename__ = 'query_for'
 
     # TODO: Make this into a property
     @classmethod
@@ -47,7 +47,8 @@ class MixedData:
     # TODO: Make this into a property
     @classmethod
     def foreign_table_name(cls):
-        return cls.QueryModelForeign.__tablename__
+        return 'query_for'
+        # return cls.QueryModelForeign.__tablename__
 
     def create_tables(self, db_engine):
         Base.metadata.create_all(db_engine)
@@ -57,8 +58,6 @@ class MixedData:
         with open(filename, 'rb') as csvfile:
             spamreader = csv.DictReader(csvfile, delimiter=',', quotechar='\'')
             for row in spamreader:
-                print row
-                print type(row)
                 # Fake a NULL into the CSV as python CSV does not support Null entries
                 # http://stackoverflow.com/questions/11379300/csv-reader-behavior-with-none-and-empty-string
                 actualRow = {item[0]: item[1] for item in row.items() if item[1] != noneValue}
