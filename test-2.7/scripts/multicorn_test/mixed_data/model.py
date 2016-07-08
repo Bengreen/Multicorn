@@ -50,10 +50,14 @@ class MixedData:
         return 'query_for'
         # return cls.QueryModelForeign.__tablename__
 
-    def create_tables(self, db_engine):
+    def create_tables(self, session_factory):
+        # TODO: Change this to not explicity create the table based on Python model, but instead generate python model based on SQL.... Then consider to use a single session throughout the whole process rather than a new session for each transaction
+        session = session_factory(autoflush=False)
+        db_engine = session.get_bind()
         Base.metadata.create_all(db_engine)
 
-    def load(self, session, filename=os.path.dirname(__file__)+'/data.csv'):
+    def load(self, session_factory, filename=os.path.dirname(__file__)+'/data.csv'):
+        session = session_factory()
         noneValue = '<None>'
         with open(filename, 'rb') as csvfile:
             spamreader = csv.DictReader(csvfile, delimiter=',', quotechar='\'')
@@ -64,3 +68,6 @@ class MixedData:
 
                 temp = self.QueryModelReference(**actualRow)
                 session.add(temp)
+        assert session.is_active, 'Query did not complete and expects a rollback: %s' % (query)
+        session.commit()
+        session.close()

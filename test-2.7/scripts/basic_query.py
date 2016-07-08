@@ -1,6 +1,6 @@
 import multicorn_test
 import multicorn_test.mixed_data
-from multicorn_test import db_engine, session_factory, session
+# from multicorn_test import db_engine, session_factory, session
 
 import pytest
 
@@ -8,39 +8,36 @@ import pytest
 class TestBasicQuery(multicorn_test.MulticornBaseTest, multicorn_test.mixed_data.MixedData):
 
     @pytest.fixture(scope='function')
-    def ref_table(self, request, session, db_engine):
-        self.create_tables(db_engine)
+    def ref_table(self, request, session_factory, db_engine):
+        self.create_tables(session_factory)
 
         def fin():
-            self.exec_no_return(session, '''DROP TABLE {0}'''.format(self.reference_table_name()))
+            self.exec_no_return(session_factory, '''DROP TABLE {0}'''.format(self.reference_table_name()))
         request.addfinalizer(fin)
         return None
 
-    def test_ref_table(self, session, ref_table):
-        (keys, values) = self.exec_return_value(session, 'SELECT * FROM {0}'.format(self.reference_table_name()))
+    def test_ref_table(self, session_factory, ref_table):
+        (keys, values) = self.exec_return_value(session_factory, 'SELECT * FROM {0}'.format(self.reference_table_name()))
         assert len(values) == 0, 'Expecting %s to be empty' % (self.reference_table_name())
         # assert 0, "Received keys=%s, values=%s" % (keys, values)
 
     @pytest.fixture(scope='function')
-    def ref_table_loaded(self, request, session, ref_table):
-        print('About to load data')
-        self.load(session)
-        session.commit()
-        print('Should have loaded data')
-
+    def ref_table_loaded(self, request, session_factory, ref_table):
+        self.load(session_factory)
+        print("SHOULD HAVE LOADED DATA")
         def fin():
-            self.exec_no_return(session, '''DELETE FROM {0}'''.format(self.reference_table_name()))
+            self.exec_no_return(session_factory, '''DELETE FROM {0}'''.format(self.reference_table_name()))
 
         request.addfinalizer(fin)
         return None
 
-    def test_ref_table_loaded(self, session, ref_table_loaded):
-        (keys, values) = self.exec_return_value(session, 'SELECT * FROM {0}'.format(self.reference_table_name()))
+    def test_ref_table_loaded(self, session_factory, ref_table_loaded):
+        (keys, values) = self.exec_return_value(session_factory, 'SELECT * FROM {0}'.format(self.reference_table_name()))
         assert len(values) > 0, 'Expecting %s to be have some contents' % (self.reference_table_name())
 
     @pytest.fixture(scope='function')
-    def helper_function(self, request, session, multicorn):
-        self.exec_no_return(session, '''
+    def helper_function(self, request, session_factory, multicorn):
+        self.exec_no_return(session_factory, '''
             create or replace function create_foreign_server() returns void as $block$
               DECLARE
                 current_db varchar;
@@ -57,17 +54,17 @@ class TestBasicQuery(multicorn_test.MulticornBaseTest, multicorn_test.mixed_data
             ''')
 
         def fin():
-            self.exec_no_return(session, '''DROP function create_foreign_server()''')
+            self.exec_no_return(session_factory, '''DROP function create_foreign_server()''')
         request.addfinalizer(fin)
         return None
 
-    def test_helper_function(self, session, helper_function):
-        (keys, values) = self.exec_return_value(session, "SELECT * FROM information_schema.routines WHERE routine_type='FUNCTION' AND specific_schema='public' AND routine_name='create_foreign_server'")
+    def test_helper_function(self, session_factory, helper_function):
+        (keys, values) = self.exec_return_value(session_factory, "SELECT * FROM information_schema.routines WHERE routine_type='FUNCTION' AND specific_schema='public' AND routine_name='create_foreign_server'")
         assert len(values) == 1, 'Expecting one record got %s' % (values)
 
     @pytest.fixture
-    def foreign_table(self, request, session, foreign_server, password):
-        self.exec_no_return(session, '''
+    def foreign_table(self, request, session_factory, foreign_server, password):
+        self.exec_no_return(session_factory, '''
             create foreign table {0} (
               id integer,
               adate date,
@@ -81,12 +78,12 @@ class TestBasicQuery(multicorn_test.MulticornBaseTest, multicorn_test.mixed_data
             '''.format(self.foreign_table_name(), self.reference_table_name(), password))
 
         def fin():
-            self.exec_no_return(session, '''DROP FOREIGN TABLE {0}'''.format(self.foreign_table_name()))
+            self.exec_no_return(session_factory, '''DROP FOREIGN TABLE {0}'''.format(self.foreign_table_name()))
         request.addfinalizer(fin)
         return None
 
-    def test_foreign_table(self, session, foreign_table, ref_table):
-        (keys, values) = self.exec_return_value(session, "SELECT * FROM information_schema.foreign_tables WHERE foreign_table_name='{0}'".format(self.foreign_table_name()))
+    def test_foreign_table(self, session_factory, foreign_table, ref_table):
+        (keys, values) = self.exec_return_value(session_factory, "SELECT * FROM information_schema.foreign_tables WHERE foreign_table_name='{0}'".format(self.foreign_table_name()))
         assert len(values) == 1, 'Expecting one record got %s' % (values)
 
     # @pytest.mark.xfail
@@ -105,17 +102,36 @@ class TestBasicQuery(multicorn_test.MulticornBaseTest, multicorn_test.mixed_data
     # --------------------------------------------------------------------------
     # Tests start here
     # --------------------------------------------------------------------------
-    # @pytest.skip
-    # @pytest.mark.parametrize("query", [
-    #     '''SELECT * from {0} order by avarchar''',
-    #     '''SELECT * from {0} order by avarchar desc''',
-    #     '''SELECT * from {0} order by avarchar desc nulls first''',
-    #     '''SELECT * from {0} order by avarchar desc nulls last''',
-    #     '''SELECT * from {0} order by avarchar nulls first''',
-    #     '''SELECT * from {0} order by avarchar nulls last''',
-    #     '''SELECT * from {0} order by anumeric'''])
-    # def test_ordered_query(self, session, query, ref_table_loaded):
-    #     self.ordered_query(session, query)
+    # @pytest.mark.skip
+    @pytest.mark.parametrize("query", [
+        '''SELECT * from {0} order by avarchar''',
+        '''SELECT * from {0} order by avarchar desc''',
+        '''SELECT * from {0} order by avarchar desc nulls first''',
+        '''SELECT * from {0} order by avarchar desc nulls last''',
+        '''SELECT * from {0} order by avarchar nulls first''',
+        '''SELECT * from {0} order by avarchar nulls last''',
+        '''SELECT * from {0} order by anumeric'''])
+    def test_ordered_query(self, session_factory, query, foreign_table, ref_table_loaded):
+        self.ordered_query(session_factory, query)
+
+    @pytest.mark.xfail
+    @pytest.mark.parametrize("query", [
+            '''SELECT * FROM {0}''',
+            '''SELECT id,atimestamp FROM {0}''',
+            '''SELECT * FROM {0} WHERE avarchar IS NULL''',
+            '''SELECT * FROM {0} WHERE avarchar IS NOT NULL''',
+            '''SELECT * from {0} where adate > '1970-01-02'::date''',
+            '''SELECT * from {0} where adate between '1970-01-01' and '1980-01-01' ''',
+            '''SELECT * from {0} where anumeric > 0''',
+            '''SELECT * from {0} where avarchar not like '%%test' ''',
+            '''SELECT * from {0} where avarchar like 'Another%%' ''',
+            '''SELECT * from {0} where avarchar ilike 'Another%%' ''',
+            '''SELECT * from {0} where avarchar not ilike 'Another%%' ''',
+            '''SELECT * from {0} where id in (1,2)''',
+            '''SELECT * from {0} where id not in (1, 2)''',
+        ])
+    def test_unordered_query(self, session_factory, query, foreign_table, ref_table_loaded):
+        self.unordered_query(session_factory, query)
 
     # @pytest.mark.parametrize("params_x", ['x_1', 'x_2'])
     # def test_check_params_single(self, params_x):
