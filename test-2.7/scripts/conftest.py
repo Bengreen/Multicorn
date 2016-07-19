@@ -6,6 +6,7 @@ def pytest_addoption(parser):
     parser.addoption("--password", action="store", default="pass", help="password: password to access the DB")
     parser.addoption("--db", action="store", default="udv", help="db: db to access")
     parser.addoption("--teardown", action="store", default="True", help="teardown: remove test elements at end of test")
+    parser.addoption("--fdw", action="store", default="multicorn.sqlalchemyfdw.SqlAlchemyFdw", help="fdw: Foreign Data Wrapper to test against")
 
 
 @pytest.fixture(scope='module')
@@ -25,6 +26,10 @@ def password(request):
 def db(request):
     return request.config.getoption("--db")
 
+
+@pytest.fixture(scope='module')
+def fdw(request):
+    return request.config.getoption("--fdw")
 
 # @pytest.fixture(scope='class')
 # def params(request):

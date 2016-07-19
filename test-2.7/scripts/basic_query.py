@@ -1,87 +1,19 @@
 import multicorn_test
-import multicorn_test.mixed_data
+# import multicorn_test.mixed_data
 # from multicorn_test import db_engine, session_factory, session
 
 import pytest
+import os
 
 
-class TestBasicQuery(multicorn_test.MulticornBaseTest, multicorn_test.mixed_data.MixedData):
+class TestBasicQuery(multicorn_test.MulticornBaseTest):
+    @classmethod
+    def table_columns(cls):
+        return 'id integer, adate date, atimestamp timestamp, anumeric numeric, avarchar varchar'
 
-    # @pytest.fixture(scope='function')
-    # def ref_table(self, request, session_factory, db_engine):
-    #     self.create_tables(session_factory)
-    #
-    #     def fin():
-    #         self.exec_no_return(session_factory, '''DROP TABLE {0}'''.format(self.ref_table_name()))
-    #     request.addfinalizer(fin)
-    #     return None
-
-
-
-    # @pytest.fixture(scope='function')
-    # def ref_table_loaded(self, request, session_factory, ref_table):
-    #     self.load(session_factory)
-    #
-    #     def fin():
-    #         self.exec_no_return(session_factory, '''DELETE FROM {0}'''.format(self.ref_table_name()))
-    #
-    #     request.addfinalizer(fin)
-    #     return None
-    #
-    # def test_ref_table_loaded(self, session_factory, ref_table_loaded):
-    #     (keys, values) = self.exec_return_value(session_factory, 'SELECT * FROM {0}'.format(self.ref_table_name()))
-    #     assert len(values) > 0, 'Expecting %s to be have some contents' % (self.ref_table_name())
-
-    @pytest.fixture(scope='function')
-    def helper_function(self, request, session_factory, multicorn):
-        self.exec_no_return(session_factory, '''
-            create or replace function create_foreign_server() returns void as $block$
-              DECLARE
-                current_db varchar;
-              BEGIN
-                SELECT into current_db current_database();
-                EXECUTE $$
-                CREATE server multicorn_srv foreign data wrapper multicorn options (
-                    wrapper 'multicorn.sqlalchemyfdw.SqlAlchemyFdw',
-                    db_url 'postgresql://$$ || current_user || '@localhost/' || current_db || $$'
-                );
-                $$;
-              END;
-            $block$ language plpgsql
-            ''')
-
-        def fin():
-            self.exec_no_return(session_factory, '''DROP function create_foreign_server()''')
-        request.addfinalizer(fin)
-        return None
-
-    def test_helper_function(self, session_factory, helper_function):
-        (keys, values) = self.exec_return_value(session_factory, "SELECT * FROM information_schema.routines WHERE routine_type='FUNCTION' AND specific_schema='public' AND routine_name='create_foreign_server'")
-        assert len(values) == 1, 'Expecting one record got %s' % (values)
-
-    @pytest.fixture
-    def foreign_table(self, request, session_factory, foreign_server, password):
-        self.exec_no_return(session_factory, '''
-            create foreign table {0} (
-              id integer,
-              adate date,
-              atimestamp timestamp,
-              anumeric numeric,
-              avarchar varchar
-            ) server multicorn_srv options (
-              tablename '{1}',
-              password '{2}'
-            )
-            '''.format(self.for_table_name(), self.ref_table_name(), password))
-
-        def fin():
-            self.exec_no_return(session_factory, '''DROP FOREIGN TABLE {0}'''.format(self.for_table_name()))
-        request.addfinalizer(fin)
-        return None
-
-    def test_foreign_table(self, session_factory, foreign_table, ref_table):
-        (keys, values) = self.exec_return_value(session_factory, "SELECT * FROM information_schema.foreign_tables WHERE foreign_table_name='{0}'".format(self.for_table_name()))
-        assert len(values) == 1, 'Expecting one record got %s' % (values)
+    @classmethod
+    def sample_data_filename(cls):
+        return os.path.dirname(__file__)+'/mixed_data.csv'
 
     # --------------------------------------------------------------------------
     # Tests start here
@@ -99,6 +31,7 @@ class TestBasicQuery(multicorn_test.MulticornBaseTest, multicorn_test.mixed_data
         self.ordered_query(session_factory, query)
 
     # @pytest.mark.xfail
+    @pytest.mark.skip
     @pytest.mark.parametrize("query", [
             '''SELECT * FROM {0}''',
             '''SELECT id,atimestamp FROM {0}''',
