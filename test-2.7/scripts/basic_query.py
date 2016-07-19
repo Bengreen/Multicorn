@@ -98,7 +98,7 @@ class TestBasicQuery(multicorn_test.MulticornBaseTest, multicorn_test.mixed_data
     def test_ordered_query(self, session_factory, query, foreign_table, ref_table_populated):
         self.ordered_query(session_factory, query)
 
-    @pytest.mark.xfail
+    # @pytest.mark.xfail
     @pytest.mark.parametrize("query", [
             '''SELECT * FROM {0}''',
             '''SELECT id,atimestamp FROM {0}''',

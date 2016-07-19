@@ -2,6 +2,7 @@ import pytest
 from sqlalchemy.sql import text
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+import collections
 
 
 class MulticornBaseTest:
@@ -91,7 +92,23 @@ class MulticornBaseTest:
         assert len(values) == 1, 'Expecting one record got %s' % (values)
 
     def unordered_query(self, session_factory, query):
-        assert 0, 'this does not test properly yet'
+        query_ref = query.format(self.ref_table_name())
+        query_for = query.format(self.for_table_name())
+
+        return_ref = self.exec_sql(session_factory, query_ref)
+        return_for = self.exec_sql(session_factory, query_for)
+
+        assert return_ref.returns_rows == return_for.returns_rows, "Expecting ref and for to have matching returns_rows"
+
+        if not return_ref.returns_rows:
+            return
+
+        assert return_ref.rowcount == return_for.rowcount, "Expecting ref and for to have same number of returning rows"
+
+        result_ref = return_ref.fetchall()
+        result_for = return_for.fetchall()
+
+        assert collections.Counter([tuple(myval.values()) for myval in result_ref]) == collections.Counter([tuple(myval.values()) for myval in result_for]), 'Expecting results from both queries to be identical apart from order'
 
     def ordered_query(self, session_factory, query):
         query_ref = query.format(self.ref_table_name())

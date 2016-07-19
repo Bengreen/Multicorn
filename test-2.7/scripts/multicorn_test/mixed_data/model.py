@@ -76,16 +76,7 @@ class MixedData:
 
     def test_ref_table(self, session_factory, ref_table):
         (keys, values) = self.exec_return_value(session_factory, 'SELECT * FROM {0}'.format(self.ref_table_name()))
-        import pdb; pdb.set_trace()
         assert len(values) == 0, 'Expecting %s to be empty, found %s' % (self.ref_table_name(), values)
-    # assert 0, "Received keys=%s, values=%s" % (keys, values)
-        # session = session_factory()
-        # connection = session.connection()
-        # tableObj = Base.metadata.tables['ben']
-        # newRow = tableObj.insert().values(id=5, avarchar='hello')
-        # session.execute(newRow)
-        # session.commit()
-        # assert 0, 'Fail here to catch an error and show output'
 
     @pytest.fixture(scope="function")
     def ref_table_populated(self, request, session_factory, ref_table, filename=os.path.dirname(__file__)+'/data.csv'):
