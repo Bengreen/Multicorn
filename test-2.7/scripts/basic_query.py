@@ -5,6 +5,54 @@ import os
 import io
 
 
+class TestInt(multicorn_test.MulticornBaseTest):
+    @classmethod
+    def table_columns(cls):
+        return 'id INTEGER, value1 INTEGER, value2 INTEGER'
+
+    @classmethod
+    def sample_data(cls):
+        return io.BytesIO('''id,value1,value2
+1,1,0
+2,2,0
+3,3,0
+4,4,0
+5,3,0
+6,2,0
+7,1,0
+8,-1,0
+9,-2,0
+10,-3,0
+11,<None>,0
+12,-2,0
+''')
+
+    @pytest.mark.parametrize("query", [
+        pytest.mark.xfail(reason="deliberate random order")('''SELECT * from {0} order by RANDOM()'''),
+        '''SELECT * from {0} order by value1''',
+        '''SELECT * from {0} order by value1 desc''',
+        '''SELECT * from {0} order by value1 desc nulls first''',
+        '''SELECT * from {0} order by value1 desc nulls last''',
+        '''SELECT * from {0} order by value1 nulls first''',
+        '''SELECT * from {0} order by value1 nulls last'''])
+    def test_ordered_query(self, session_factory, query, foreign_table, ref_table_populated):
+        self.ordered_query(session_factory, query)
+
+    @pytest.mark.parametrize("query", [
+            '''SELECT * FROM {0}''',
+            '''SELECT id,value1 FROM {0}''',
+            '''SELECT * FROM {0} WHERE value1 IS NULL''',
+            '''SELECT * FROM {0} WHERE value1 IS NOT NULL''',
+            '''SELECT * from {0} where value1 > '0'::INTEGER''',
+            '''SELECT * from {0} where value1 between 0 and 3 ''',
+            '''SELECT * from {0} where value1 > 0''',
+            '''SELECT * from {0} where value1 in (1,2)''',
+            '''SELECT * from {0} where value1 not in (1, 2)''',
+        ])
+    def test_unordered_query(self, session_factory, query, foreign_table, ref_table_populated):
+        self.unordered_query(session_factory, query)
+
+
 class TestBasicQuery(multicorn_test.MulticornBaseTest):
     @classmethod
     def table_columns(cls):

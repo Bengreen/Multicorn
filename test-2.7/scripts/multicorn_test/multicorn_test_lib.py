@@ -213,7 +213,11 @@ class MulticornBaseTest:
         result_ref = return_ref.fetchall()
         result_for = return_for.fetchall()
 
-        assert collections.Counter([tuple(myval.values()) for myval in result_ref]) == collections.Counter([tuple(myval.values()) for myval in result_for]), 'Expecting results from both queries to be identical apart from order'
+        collection_ref = collections.Counter([tuple(myval.values()) for myval in result_ref])
+        collection_for = collections.Counter([tuple(myval.values()) for myval in result_for])
+
+        print('Checking match of ref:%s == for:%s' % (collection_ref, collection_for))
+        assert collection_ref == collection_for, 'Expecting results from both queries to be identical apart from order'
 
     def ordered_query(self, session_factory, query):
         query_ref = query.format(self.ref_table_name())
@@ -233,4 +237,5 @@ class MulticornBaseTest:
         result_for = return_for.fetchall()
 
         for (row_ref, row_for) in zip(result_ref, result_for):
+            print('Checking match of ref:%s == for:%s' % (row_ref, row_for))
             assert row_ref == row_for, 'Rows should match %s == %s' % (row_ref, row_for)
