@@ -5,7 +5,6 @@ from sqlalchemy.orm import sessionmaker
 import collections
 
 import csv
-import os
 
 from sqlalchemy.ext.declarative import declarative_base
 

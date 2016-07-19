@@ -1,10 +1,7 @@
 import multicorn_test
-# import multicorn_test.mixed_data
-# from multicorn_test import db_engine, session_factory, session
 
 import pytest
 import os
-# import StringIO
 import io
 
 
