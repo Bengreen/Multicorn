@@ -94,8 +94,8 @@ class MulticornBaseTest:
         assert 0, 'this does not test properly yet'
 
     def ordered_query(self, session_factory, query):
-        query_ref = query.format(self.reference_table_name())
-        query_for = query.format(self.foreign_table_name())
+        query_ref = query.format(self.ref_table_name())
+        query_for = query.format(self.for_table_name())
 
         return_ref = self.exec_sql(session_factory, query_ref)
         return_for = self.exec_sql(session_factory, query_for)

@@ -7,33 +7,30 @@ import pytest
 
 class TestBasicQuery(multicorn_test.MulticornBaseTest, multicorn_test.mixed_data.MixedData):
 
-    @pytest.fixture(scope='function')
-    def ref_table(self, request, session_factory, db_engine):
-        self.create_tables(session_factory)
+    # @pytest.fixture(scope='function')
+    # def ref_table(self, request, session_factory, db_engine):
+    #     self.create_tables(session_factory)
+    #
+    #     def fin():
+    #         self.exec_no_return(session_factory, '''DROP TABLE {0}'''.format(self.ref_table_name()))
+    #     request.addfinalizer(fin)
+    #     return None
 
-        def fin():
-            self.exec_no_return(session_factory, '''DROP TABLE {0}'''.format(self.reference_table_name()))
-        request.addfinalizer(fin)
-        return None
 
-    def test_ref_table(self, session_factory, ref_table):
-        (keys, values) = self.exec_return_value(session_factory, 'SELECT * FROM {0}'.format(self.reference_table_name()))
-        assert len(values) == 0, 'Expecting %s to be empty' % (self.reference_table_name())
-        # assert 0, "Received keys=%s, values=%s" % (keys, values)
 
-    @pytest.fixture(scope='function')
-    def ref_table_loaded(self, request, session_factory, ref_table):
-        self.load(session_factory)
-        print("SHOULD HAVE LOADED DATA")
-        def fin():
-            self.exec_no_return(session_factory, '''DELETE FROM {0}'''.format(self.reference_table_name()))
-
-        request.addfinalizer(fin)
-        return None
-
-    def test_ref_table_loaded(self, session_factory, ref_table_loaded):
-        (keys, values) = self.exec_return_value(session_factory, 'SELECT * FROM {0}'.format(self.reference_table_name()))
-        assert len(values) > 0, 'Expecting %s to be have some contents' % (self.reference_table_name())
+    # @pytest.fixture(scope='function')
+    # def ref_table_loaded(self, request, session_factory, ref_table):
+    #     self.load(session_factory)
+    #
+    #     def fin():
+    #         self.exec_no_return(session_factory, '''DELETE FROM {0}'''.format(self.ref_table_name()))
+    #
+    #     request.addfinalizer(fin)
+    #     return None
+    #
+    # def test_ref_table_loaded(self, session_factory, ref_table_loaded):
+    #     (keys, values) = self.exec_return_value(session_factory, 'SELECT * FROM {0}'.format(self.ref_table_name()))
+    #     assert len(values) > 0, 'Expecting %s to be have some contents' % (self.ref_table_name())
 
     @pytest.fixture(scope='function')
     def helper_function(self, request, session_factory, multicorn):
@@ -75,29 +72,16 @@ class TestBasicQuery(multicorn_test.MulticornBaseTest, multicorn_test.mixed_data
               tablename '{1}',
               password '{2}'
             )
-            '''.format(self.foreign_table_name(), self.reference_table_name(), password))
+            '''.format(self.for_table_name(), self.ref_table_name(), password))
 
         def fin():
-            self.exec_no_return(session_factory, '''DROP FOREIGN TABLE {0}'''.format(self.foreign_table_name()))
+            self.exec_no_return(session_factory, '''DROP FOREIGN TABLE {0}'''.format(self.for_table_name()))
         request.addfinalizer(fin)
         return None
 
     def test_foreign_table(self, session_factory, foreign_table, ref_table):
-        (keys, values) = self.exec_return_value(session_factory, "SELECT * FROM information_schema.foreign_tables WHERE foreign_table_name='{0}'".format(self.foreign_table_name()))
+        (keys, values) = self.exec_return_value(session_factory, "SELECT * FROM information_schema.foreign_tables WHERE foreign_table_name='{0}'".format(self.for_table_name()))
         assert len(values) == 1, 'Expecting one record got %s' % (values)
-
-    # @pytest.mark.xfail
-    # @pytest.mark.run(order=110)
-    # def test_copy_ref_to_for(self, session, ref_table_loaded):
-    #     self.copy_ref_to_for(session)
-
-    # @pytest.mark.skip(reason="Count is wrong when debugging")
-    # @pytest.mark.run(order=15)
-    # def test_select_into_query_ref(self, session):
-    #     sqlReturn = session.execute('SELECT count(*) FROM query_ref')
-    #     assert sqlReturn.returns_rows, "Should return some rows"
-    #     numRows = sqlReturn.scalar()
-    #     assert numRows == 0, "Should not be any data in the table"
 
     # --------------------------------------------------------------------------
     # Tests start here
@@ -111,7 +95,7 @@ class TestBasicQuery(multicorn_test.MulticornBaseTest, multicorn_test.mixed_data
         '''SELECT * from {0} order by avarchar nulls first''',
         '''SELECT * from {0} order by avarchar nulls last''',
         '''SELECT * from {0} order by anumeric'''])
-    def test_ordered_query(self, session_factory, query, foreign_table, ref_table_loaded):
+    def test_ordered_query(self, session_factory, query, foreign_table, ref_table_populated):
         self.ordered_query(session_factory, query)
 
     @pytest.mark.xfail
@@ -130,7 +114,7 @@ class TestBasicQuery(multicorn_test.MulticornBaseTest, multicorn_test.mixed_data
             '''SELECT * from {0} where id in (1,2)''',
             '''SELECT * from {0} where id not in (1, 2)''',
         ])
-    def test_unordered_query(self, session_factory, query, foreign_table, ref_table_loaded):
+    def test_unordered_query(self, session_factory, query, foreign_table, ref_table_populated):
         self.unordered_query(session_factory, query)
 
     # @pytest.mark.parametrize("params_x", ['x_1', 'x_2'])
