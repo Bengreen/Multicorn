@@ -28,7 +28,7 @@ class TestInt(multicorn_test.MulticornBaseTest):
 ''')
 
     @pytest.mark.parametrize("query", [
-        pytest.mark.xfail(reason="deliberate random order")('''SELECT * from {0} order by RANDOM()'''),
+        pytest.mark.xfail(reason="deliberate random ORDER")('''SELECT * from {0} order by RANDOM()'''),
         '''SELECT * from {0} order by value1''',
         '''SELECT * from {0} order by value1 desc''',
         '''SELECT * from {0} order by value1 desc nulls first''',
@@ -39,6 +39,8 @@ class TestInt(multicorn_test.MulticornBaseTest):
         self.ordered_query(session_factory, query)
 
     @pytest.mark.parametrize("query", [
+            pytest.mark.xfail(reason="deliberate random WHERE")('''SELECT * from {0} WHERE RANDOM() < 0.5'''),
+            pytest.mark.xfail(reason="deliberate random ORDER")('''SELECT * from {0} ORDER BY RANDOM() LIMIT 5'''),
             '''SELECT * FROM {0}''',
             '''SELECT id,value1 FROM {0}''',
             '''SELECT * FROM {0} WHERE value1 IS NULL''',
