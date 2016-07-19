@@ -4,6 +4,8 @@ import multicorn_test
 
 import pytest
 import os
+# import StringIO
+import io
 
 
 class TestBasicQuery(multicorn_test.MulticornBaseTest):
@@ -12,8 +14,15 @@ class TestBasicQuery(multicorn_test.MulticornBaseTest):
         return 'id integer, adate date, atimestamp timestamp, anumeric numeric, avarchar varchar'
 
     @classmethod
-    def sample_data_filename(cls):
-        return os.path.dirname(__file__)+'/mixed_data.csv'
+    def sample_data(cls):
+        output = io.BytesIO('''id,adate,atimestamp,anumeric,avarchar
+1,'1980-01-01','1980-01-01  11:01:21.132912',3.4,'Test'
+2,'1990-03-05','1998-03-02  10:40:18.321023',12.2,'Another Test'
+3,'1972-01-02','1972-01-02  16:12:54.000000',4000,'another Test'
+4,'1922-11-02','1962-01-02  23:12:54.000000',-3000,<None>
+''')
+        return output
+        # return open(os.path.dirname(__file__)+'/mixed_data.csv', 'rb')
 
     # --------------------------------------------------------------------------
     # Tests start here
@@ -31,7 +40,7 @@ class TestBasicQuery(multicorn_test.MulticornBaseTest):
         self.ordered_query(session_factory, query)
 
     # @pytest.mark.xfail
-    @pytest.mark.skip
+    # @pytest.mark.skip
     @pytest.mark.parametrize("query", [
             '''SELECT * FROM {0}''',
             '''SELECT id,atimestamp FROM {0}''',

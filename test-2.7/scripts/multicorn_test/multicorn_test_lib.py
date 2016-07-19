@@ -74,7 +74,7 @@ class MulticornBaseTest:
     def ref_table_populated(self, request, session_factory, ref_table):
         session = session_factory()
         noneValue = '<None>'
-        with open(self.sample_data_filename(), 'rb') as csvfile:
+        with self.sample_data() as csvfile:
             spamreader = csv.DictReader(csvfile, delimiter=',', quotechar='\'')
             for row in spamreader:
                 # Fake a NULL into the CSV as python CSV does not support Null entries
@@ -153,8 +153,6 @@ class MulticornBaseTest:
 
     @pytest.fixture
     def foreign_table(self, request, session_factory, ref_table, foreign_server, password):
-        print ref_table
-        import pdb; pdb.set_trace()
         self.exec_no_return(session_factory, '''
             create foreign table {0} (
                 {3}
