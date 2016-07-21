@@ -7,6 +7,7 @@ def pytest_addoption(parser):
     parser.addoption("--db", action="store", default="udv", help="db: db to access")
     parser.addoption("--teardown", action="store", default="True", help="teardown: remove test elements at end of test")
     parser.addoption("--fdw", action="store", default="multicorn.sqlalchemyfdw.SqlAlchemyFdw", help="fdw: Foreign Data Wrapper to test against")
+    parser.addoption("--fdw_options", action="store", default="tablename '{ref_table_name}', password '{password}'", help="fdw_options: Options to be passed directly into FDW")
 
 
 @pytest.fixture(scope='module')
@@ -30,6 +31,12 @@ def db(request):
 @pytest.fixture(scope='module')
 def fdw(request):
     return request.config.getoption("--fdw")
+
+
+@pytest.fixture(scope='module')
+def fdw_options(request):
+    return request.config.getoption("--fdw_options")
+
 
 # @pytest.fixture(scope='class')
 # def params(request):

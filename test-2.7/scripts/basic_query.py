@@ -5,6 +5,9 @@ import os
 import io
 
 
+# aeHiveUdv.aeHiveUdv
+
+
 class TestInt(multicorn_test.MulticornBaseTest):
     @classmethod
     def table_columns(cls):
@@ -13,18 +16,18 @@ class TestInt(multicorn_test.MulticornBaseTest):
     @classmethod
     def sample_data(cls):
         return io.BytesIO('''id,value1,value2
-1,1,0
-2,2,0
-3,3,0
-4,4,0
-5,3,0
-6,2,0
-7,1,0
-8,-1,0
-9,-2,0
-10,-3,0
-11,<None>,0
-12,-2,0
+1,1,1
+2,2,1
+3,3,1
+4,4,1
+5,3,1
+6,2,1
+7,1,1
+8,-1,1
+9,-2,1
+10,-3,1
+11,<None>,1
+12,-2,1
 ''')
 
     @pytest.mark.parametrize("query", [
@@ -34,22 +37,57 @@ class TestInt(multicorn_test.MulticornBaseTest):
         '''SELECT * from {0} order by value1 desc nulls first''',
         '''SELECT * from {0} order by value1 desc nulls last''',
         '''SELECT * from {0} order by value1 nulls first''',
-        '''SELECT * from {0} order by value1 nulls last'''])
+        '''SELECT * from {0} order by value1 nulls last''',
+        ])
     def test_ordered_query(self, session_factory, query, foreign_table, ref_table_populated):
         self.ordered_query(session_factory, query)
 
     @pytest.mark.parametrize("query", [
-            pytest.mark.xfail(reason="deliberate random WHERE")('''SELECT * from {0} WHERE RANDOM() < 0.5'''),
-            pytest.mark.xfail(reason="deliberate random ORDER")('''SELECT * from {0} ORDER BY RANDOM() LIMIT 5'''),
-            '''SELECT * FROM {0}''',
-            '''SELECT id,value1 FROM {0}''',
-            '''SELECT * FROM {0} WHERE value1 IS NULL''',
-            '''SELECT * FROM {0} WHERE value1 IS NOT NULL''',
-            '''SELECT * from {0} where value1 > '0'::INTEGER''',
-            '''SELECT * from {0} where value1 between 0 and 3 ''',
-            '''SELECT * from {0} where value1 > 0''',
-            '''SELECT * from {0} where value1 in (1,2)''',
-            '''SELECT * from {0} where value1 not in (1, 2)''',
+        # Force fail tests to confirm that the test framework is operating correctly
+        pytest.mark.xfail(reason="deliberate random WHERE")('''SELECT * from {0} WHERE RANDOM() < 0.5'''),
+        pytest.mark.xfail(reason="deliberate random ORDER")('''SELECT * from {0} ORDER BY RANDOM() LIMIT 5'''),
+        # Simple query tests to confirm basic query operations
+        '''SELECT * FROM {0}''',
+        '''SELECT id,value1 FROM {0}''',
+        '''SELECT count(*) FROM {0}''',
+        # Test for presence of NULL
+        '''SELECT * FROM {0} WHERE value1 IS NULL''',
+        '''SELECT * FROM {0} WHERE value1 IS NOT NULL''',
+        # Test comparison with integers (explicit conversion)
+        '''SELECT * from {0} where value1 > '1'::INTEGER''',
+        '''SELECT * from {0} where value1 < '1'::INTEGER''',
+        '''SELECT * from {0} where value1 = '1'::INTEGER''',
+        '''SELECT * from {0} where value1 != '1'::INTEGER''',
+        '''SELECT * from {0} where value1 >= '1'::INTEGER''',
+        '''SELECT * from {0} where value1 >= '1'::INTEGER''',
+        # Test comparison with integers (implicit conversion)
+        '''SELECT * from {0} where value1 > 1''',
+        '''SELECT * from {0} where value1 < 1''',
+        '''SELECT * from {0} where value1 = 1''',
+        '''SELECT * from {0} where value1 != 1''',
+        '''SELECT * from {0} where value1 >= 1''',
+        '''SELECT * from {0} where value1 <= 1''',
+        # Test comparison with float (implicit conversion)
+        '''SELECT * from {0} where value1 > 1.0''',
+        '''SELECT * from {0} where value1 < 1.0''',
+        '''SELECT * from {0} where value1 = 1.0''',
+        '''SELECT * from {0} where value1 != 1.0''',
+        '''SELECT * from {0} where value1 >= 1.0''',
+        '''SELECT * from {0} where value1 <= 1.0''',
+        # Test comparison with integer (from value2)
+        '''SELECT * from {0} where value1 > value2''',
+        '''SELECT * from {0} where value1 < value2''',
+        '''SELECT * from {0} where value1 = value2''',
+        '''SELECT * from {0} where value1 != value2''',
+        '''SELECT * from {0} where value1 >= value2''',
+        '''SELECT * from {0} where value1 <= value2''',
+        # Test between operator
+        '''SELECT * from {0} where value1 between 1 and 2''',
+        # Test in, not in operator
+        '''SELECT * from {0} where value1 in (1,2)''',
+        '''SELECT * from {0} where value1 not in (1, 2)''',
+        # Test Group operator
+        '''SELECT count(*) FROM {0} GROUP BY value1''',
         ])
     def test_unordered_query(self, session_factory, query, foreign_table, ref_table_populated):
         self.unordered_query(session_factory, query)

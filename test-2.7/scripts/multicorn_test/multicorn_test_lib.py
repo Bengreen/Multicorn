@@ -151,18 +151,24 @@ class MulticornBaseTest:
         assert len(values) == 1, 'Expecting one record got %s' % (values)
 
     @pytest.fixture
-    def foreign_table(self, request, session_factory, ref_table, foreign_server, password):
-        self.exec_no_return(session_factory, '''
-            create foreign table {0} (
-                {3}
-            ) server multicorn_srv options (
-                tablename '{1}',
-                password '{2}'
+    def foreign_table(self, request, session_factory, ref_table, foreign_server, password, fdw_options):
+        print("Looking at fdw_options:%s" % (fdw_options))
+        fdw_options_expanded = fdw_options.format(
+            for_table_name=self.for_table_name(),
+            ref_table_name=self.ref_table_name(),
+            password=password,
             )
-            '''.format(self.for_table_name(), self.ref_table_name(), password, self.table_columns()))
+
+        self.exec_no_return(session_factory, '''
+            create foreign table {for_table_name} (
+                {columns}
+            ) server multicorn_srv options (
+                {fdw_options}
+            )
+            '''.format(for_table_name=self.for_table_name(), columns=self.table_columns(), fdw_options=fdw_options_expanded))
 
         def fin():
-            self.exec_no_return(session_factory, '''DROP FOREIGN TABLE {0}'''.format(self.for_table_name()))
+            self.exec_no_return(session_factory, '''DROP FOREIGN TABLE {for_table_name}'''.format(for_table_name=self.for_table_name()))
         request.addfinalizer(fin)
         return None
 
