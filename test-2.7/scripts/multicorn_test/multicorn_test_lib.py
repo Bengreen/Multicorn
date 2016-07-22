@@ -13,6 +13,16 @@ Base = declarative_base()
 
 
 class MulticornBaseTest:
+    # Create fixture abstract for executing Foreign table setup
+    @pytest.fixture(scope="class")
+    def for_table_populated(self, request, session_factory, ref_table):
+        print("Populate for_table")
+
+        def fin():
+            print("Cleanup for_table")
+
+        request.addfinalizer(fin)
+        return  # provide the fixture value
 
     # TODO: Make this into a property
     @classmethod
@@ -47,11 +57,11 @@ class MulticornBaseTest:
         self.exec_return_empty(session_factory, 'SELECT')
 
     @pytest.fixture(scope="class")
-    def ref_table(self, request, session_factory, db_engine):
+    def ref_table(self, request, session_factory, db_engine, table_columns):
         self.exec_sql(session_factory, '''
             CREATE TABLE {0} (
                 {1}
-            );'''.format(self.ref_table_name(), self.table_columns()))
+            );'''.format(self.ref_table_name(), table_columns))
 
         Base.metadata.reflect(bind=db_engine, only=[self.ref_table_name()])
 
@@ -73,7 +83,7 @@ class MulticornBaseTest:
     def ref_table_populated(self, request, session_factory, ref_table):
         session = session_factory()
         noneValue = '<None>'
-        with self.sample_data() as csvfile:
+        with self.sample_io() as csvfile:
             spamreader = csv.DictReader(csvfile, delimiter=',', quotechar='\'')
             for row in spamreader:
                 # Fake a NULL into the CSV as python CSV does not support Null entries
@@ -151,7 +161,7 @@ class MulticornBaseTest:
         assert len(values) == 1, 'Expecting one record got %s' % (values)
 
     @pytest.fixture
-    def foreign_table(self, request, session_factory, ref_table, foreign_server, password, fdw_options):
+    def foreign_table(self, request, session_factory, ref_table, foreign_server, password, fdw_options, table_columns):
         print("Looking at fdw_options:%s" % (fdw_options))
         fdw_options_expanded = fdw_options.format(
             for_table_name=self.for_table_name(),
@@ -165,7 +175,7 @@ class MulticornBaseTest:
             ) server multicorn_srv options (
                 {fdw_options}
             )
-            '''.format(for_table_name=self.for_table_name(), columns=self.table_columns(), fdw_options=fdw_options_expanded))
+            '''.format(for_table_name=self.for_table_name(), columns=table_columns, fdw_options=fdw_options_expanded))
 
         def fin():
             self.exec_no_return(session_factory, '''DROP FOREIGN TABLE {for_table_name}'''.format(for_table_name=self.for_table_name()))
@@ -185,26 +195,30 @@ class MulticornBaseTest:
         assert session.is_active, 'Query did not complete and expects a rollback: %s' % (query)
         session.commit()
         session.close()
+        del session
         return sqlReturn
 
     def exec_no_return(self, session_factory, query):
         returnVal = self.exec_sql(session_factory, query)
         assert not returnVal.returns_rows, "Not expecting any rows"
+        returnVal.close()
 
     def exec_return_empty(self, session_factory, query):
         returnVal = self.exec_sql(session_factory, query)
         assert returnVal.returns_rows, "Expecting rows"
         assert returnVal.rowcount == 1, "Expecting a single row"
         assert len(returnVal.keys()) == 0, "Should not return any columns, found %s" % (returnVal.keys())
+        returnVal.close()
 
     def exec_return_value(self, session_factory, query):
         returnVal = self.exec_sql(session_factory, query)
         assert returnVal.returns_rows, "Expecting rows"
         return (returnVal.keys(), returnVal.fetchall())
+        returnVal.close()
 
     def unordered_query(self, session_factory, query):
-        query_ref = query.format(self.ref_table_name())
-        query_for = query.format(self.for_table_name())
+        query_ref = query.format(table_name=self.ref_table_name())
+        query_for = query.format(table_name=self.for_table_name())
 
         return_ref = self.exec_sql(session_factory, query_ref)
         return_for = self.exec_sql(session_factory, query_for)
@@ -216,18 +230,20 @@ class MulticornBaseTest:
 
         assert return_ref.rowcount == return_for.rowcount, "Expecting ref and for to have same number of returning rows"
 
-        result_ref = return_ref.fetchall()
-        result_for = return_for.fetchall()
+        # result_ref = return_ref.fetchall()
+        # result_for = return_for.fetchall()
 
-        collection_ref = collections.Counter([tuple(myval.values()) for myval in result_ref])
-        collection_for = collections.Counter([tuple(myval.values()) for myval in result_for])
+        collection_ref = collections.Counter([tuple(myval.values()) for myval in return_ref.fetchall()])
+        collection_for = collections.Counter([tuple(myval.values()) for myval in return_for.fetchall()])
 
         print('Checking match of ref:%s == for:%s' % (collection_ref, collection_for))
         assert collection_ref == collection_for, 'Expecting results from both queries to be identical apart from order'
+        return_ref.close()
+        return_for.close()
 
     def ordered_query(self, session_factory, query):
-        query_ref = query.format(self.ref_table_name())
-        query_for = query.format(self.for_table_name())
+        query_ref = query.format(table_name=self.ref_table_name())
+        query_for = query.format(table_name=self.for_table_name())
 
         return_ref = self.exec_sql(session_factory, query_ref)
         return_for = self.exec_sql(session_factory, query_for)
@@ -239,9 +255,11 @@ class MulticornBaseTest:
 
         assert return_ref.rowcount == return_for.rowcount, "Expecting ref and for to have same number of returning rows"
 
-        result_ref = return_ref.fetchall()
-        result_for = return_for.fetchall()
+        # result_ref = return_ref.fetchall()
+        # result_for = return_for.fetchall()
 
-        for (row_ref, row_for) in zip(result_ref, result_for):
+        for (row_ref, row_for) in zip(return_ref.fetchall(), return_for.fetchall()):
             print('Checking match of ref:%s == for:%s' % (row_ref, row_for))
             assert row_ref == row_for, 'Rows should match %s == %s' % (row_ref, row_for)
+        return_ref.close()
+        return_for.close()

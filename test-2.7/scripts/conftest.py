@@ -20,21 +20,33 @@ def username(request):
 
 @pytest.fixture(scope='module')
 def password(request):
+    """
+    provide the PostgreSQL password
+    """
     return request.config.getoption("--password")
 
 
 @pytest.fixture(scope='module')
 def db(request):
+    """
+    Provide the PostgreSQL db name
+    """
     return request.config.getoption("--db")
 
 
 @pytest.fixture(scope='module')
 def fdw(request):
+    """
+    Provide the FDW python name
+    """
     return request.config.getoption("--fdw")
 
 
 @pytest.fixture(scope='module')
 def fdw_options(request):
+    """
+    Provide options transcribed into the options of the FDW. Some variable substution is available here
+    """
     return request.config.getoption("--fdw_options")
 
 

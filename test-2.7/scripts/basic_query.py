@@ -7,15 +7,58 @@ import io
 
 # aeHiveUdv.aeHiveUdv
 
+class TestVarchar(multicorn_test.MulticornBaseTest):
 
-class TestInt(multicorn_test.MulticornBaseTest):
-    @classmethod
-    def table_columns(cls):
-        return 'id INTEGER, value1 INTEGER, value2 INTEGER'
+    @pytest.fixture(scope="class")
+    def table_columns(self, request):
+        return 'id INTEGER, value1 VARCHAR, value2 VARCHAR'
 
     @classmethod
     def sample_data(cls):
-        return io.BytesIO('''id,value1,value2
+        return '''id,value1,value2
+1,'a','a'
+2,'b','c'
+3,'c','c'
+'''
+
+    @classmethod
+    def sample_io(cls):
+        return io.BytesIO(cls.sample_data())
+
+    @pytest.mark.parametrize("query", [
+        # Force fail tests to confirm that the test framework is operating correctly
+        '''SELECT * FROM {table_name} WHERE value1 = value2''',
+        '''SELECT * FROM {table_name} WHERE value1 = 'value2' ''',
+        ])
+    def test_unordered_query(self, session_factory, query, foreign_table, ref_table_populated, for_table_populated):
+        self.unordered_query(session_factory, query)
+
+
+class TestInt(multicorn_test.MulticornBaseTest):
+
+    # @pytest.fixture(scope="class")
+    # def data_type_value1(self, request):
+    #     return xxx,yyy
+
+    # @pytest.mark.parametrize("value1, value2, value3", [
+    #     ('INTEGER', 'INTEGER', 'INTEGER'),
+    #     ('INTEGER', 'INTEGER', 'REAL'),
+    #     ])
+    @pytest.fixture(scope="class", params=[
+        ('INTEGER', 'INTEGER', 'INTEGER'),
+        ('INTEGER', 'INTEGER', 'REAL'),
+        ])
+    def table_columns_types(self, request):
+        return request.param
+
+    @pytest.fixture(scope="class")
+    def table_columns(self, request, table_columns_types):
+        (value1, value2, value3) = table_columns_types
+        return 'id INTEGER, value1 {value1}, value2 {value2}, value3 {value3}'.format(value1=value1, value2=value2, value3=value3)
+
+    @classmethod
+    def sample_data(cls):
+        return '''id,value1,value2
 1,1,1
 2,2,1
 3,3,1
@@ -28,78 +71,112 @@ class TestInt(multicorn_test.MulticornBaseTest):
 10,-3,1
 11,<None>,1
 12,-2,1
-''')
+'''
+
+    @classmethod
+    def sample_io(cls):
+        return io.BytesIO(cls.sample_data())
 
     @pytest.mark.parametrize("query", [
-        pytest.mark.xfail(reason="deliberate random ORDER")('''SELECT * from {0} order by RANDOM()'''),
-        '''SELECT * from {0} order by value1''',
-        '''SELECT * from {0} order by value1 desc''',
-        '''SELECT * from {0} order by value1 desc nulls first''',
-        '''SELECT * from {0} order by value1 desc nulls last''',
-        '''SELECT * from {0} order by value1 nulls first''',
-        '''SELECT * from {0} order by value1 nulls last''',
+        pytest.mark.xfail(reason="deliberate random ORDER")('''SELECT * from {table_name} order by RANDOM()'''),
+        '''SELECT * from {table_name} order by value1''',
+        '''SELECT * from {table_name} order by value1 desc''',
+        '''SELECT * from {table_name} order by value1 desc nulls first''',
+        '''SELECT * from {table_name} order by value1 desc nulls last''',
+        '''SELECT * from {table_name} order by value1 nulls first''',
+        '''SELECT * from {table_name} order by value1 nulls last''',
         ])
-    def test_ordered_query(self, session_factory, query, foreign_table, ref_table_populated):
+    def test_ordered_query(self, session_factory, query, foreign_table, ref_table_populated, for_table_populated):
         self.ordered_query(session_factory, query)
 
+    # Build out the operators and columns for the table
+    @pytest.mark.parametrize('operator', [
+        '>',
+        '<',
+        '=',
+        '!=',
+        '<>',
+        '>=',
+        '<=',
+        ])
+    @pytest.mark.parametrize('left_value', [
+        'value1',
+        'value2',
+        ])
+    @pytest.mark.parametrize('right_value', [
+        'value1',
+        'value2',
+        ])
+    @pytest.mark.parametrize('query', [
+        '''SELECT * from {table_name} where {left_value} {operator} {right_value}''',
+        ])
+    def test_operators(self, left_value, operator, right_value, session_factory, query, foreign_table, ref_table_populated, for_table_populated):
+        self.unordered_query(session_factory, query.format(table_name='{table_name}', left_value=left_value, operator=operator, right_value=right_value))
+
+    # Build out example queries
     @pytest.mark.parametrize("query", [
         # Force fail tests to confirm that the test framework is operating correctly
-        pytest.mark.xfail(reason="deliberate random WHERE")('''SELECT * from {0} WHERE RANDOM() < 0.5'''),
-        pytest.mark.xfail(reason="deliberate random ORDER")('''SELECT * from {0} ORDER BY RANDOM() LIMIT 5'''),
+        pytest.mark.xfail(reason="deliberate random WHERE")('''SELECT * from {table_name} WHERE RANDOM() < 0.5'''),
+        pytest.mark.xfail(reason="deliberate random ORDER")('''SELECT * from {table_name} ORDER BY RANDOM() LIMIT 5'''),
+
+        # Test for quotes in query
+        '''SELECT * FROM {table_name} WHERE value1 = value1 ''',
+
         # Simple query tests to confirm basic query operations
-        '''SELECT * FROM {0}''',
-        '''SELECT id,value1 FROM {0}''',
-        '''SELECT count(*) FROM {0}''',
+        '''SELECT * FROM {table_name}''',
+        '''SELECT id,value1 FROM {table_name}''',
+        '''SELECT count(*) FROM {table_name}''',
         # Test for presence of NULL
-        '''SELECT * FROM {0} WHERE value1 IS NULL''',
-        '''SELECT * FROM {0} WHERE value1 IS NOT NULL''',
+        '''SELECT * FROM {table_name} WHERE value1 IS NULL''',
+        '''SELECT * FROM {table_name} WHERE value1 IS NOT NULL''',
         # Test comparison with integers (explicit conversion)
-        '''SELECT * from {0} where value1 > '1'::INTEGER''',
-        '''SELECT * from {0} where value1 < '1'::INTEGER''',
-        '''SELECT * from {0} where value1 = '1'::INTEGER''',
-        '''SELECT * from {0} where value1 != '1'::INTEGER''',
-        '''SELECT * from {0} where value1 >= '1'::INTEGER''',
-        '''SELECT * from {0} where value1 >= '1'::INTEGER''',
+        '''SELECT * from {table_name} where value1 > '1'::INTEGER''',
+        '''SELECT * from {table_name} where value1 < '1'::INTEGER''',
+        '''SELECT * from {table_name} where value1 = '1'::INTEGER''',
+        '''SELECT * from {table_name} where value1 != '1'::INTEGER''',
+        '''SELECT * from {table_name} where value1 >= '1'::INTEGER''',
+        '''SELECT * from {table_name} where value1 >= '1'::INTEGER''',
         # Test comparison with integers (implicit conversion)
-        '''SELECT * from {0} where value1 > 1''',
-        '''SELECT * from {0} where value1 < 1''',
-        '''SELECT * from {0} where value1 = 1''',
-        '''SELECT * from {0} where value1 != 1''',
-        '''SELECT * from {0} where value1 >= 1''',
-        '''SELECT * from {0} where value1 <= 1''',
+        '''SELECT * from {table_name} where value1 > 1''',
+        '''SELECT * from {table_name} where value1 < 1''',
+        '''SELECT * from {table_name} where value1 = 1''',
+        '''SELECT * from {table_name} where value1 != 1''',
+        '''SELECT * from {table_name} where value1 >= 1''',
+        '''SELECT * from {table_name} where value1 <= 1''',
         # Test comparison with float (implicit conversion)
-        '''SELECT * from {0} where value1 > 1.0''',
-        '''SELECT * from {0} where value1 < 1.0''',
-        '''SELECT * from {0} where value1 = 1.0''',
-        '''SELECT * from {0} where value1 != 1.0''',
-        '''SELECT * from {0} where value1 >= 1.0''',
-        '''SELECT * from {0} where value1 <= 1.0''',
+        '''SELECT * from {table_name} where value1 > 1.0''',
+        '''SELECT * from {table_name} where value1 < 1.0''',
+        '''SELECT * from {table_name} where value1 = 1.0''',
+        '''SELECT * from {table_name} where value1 != 1.0''',
+        '''SELECT * from {table_name} where value1 >= 1.0''',
+        '''SELECT * from {table_name} where value1 <= 1.0''',
         # Test comparison with integer (from value2)
-        '''SELECT * from {0} where value1 > value2''',
-        '''SELECT * from {0} where value1 < value2''',
-        '''SELECT * from {0} where value1 = value2''',
-        '''SELECT * from {0} where value1 != value2''',
-        '''SELECT * from {0} where value1 >= value2''',
-        '''SELECT * from {0} where value1 <= value2''',
+        '''SELECT * from {table_name} where value1 > value2''',
+        '''SELECT * from {table_name} where value1 < value2''',
+        '''SELECT * from {table_name} where value1 = value2''',
+        '''SELECT * from {table_name} where value1 != value2''',
+        '''SELECT * from {table_name} where value1 >= value2''',
+        '''SELECT * from {table_name} where value1 <= value2''',
         # Test between operator
-        '''SELECT * from {0} where value1 between 1 and 2''',
+        '''SELECT * from {table_name} where value1 between 1 and 2''',
         # Test in, not in operator
-        '''SELECT * from {0} where value1 in (1,2)''',
-        '''SELECT * from {0} where value1 not in (1, 2)''',
+        '''SELECT * from {table_name} where value1 in (1,2)''',
+        '''SELECT * from {table_name} where value1 not in (1, 2)''',
         # Test Group operator
-        '''SELECT count(*) FROM {0} GROUP BY value1''',
+        '''SELECT count(*) FROM {table_name} GROUP BY value1''',
         ])
-    def test_unordered_query(self, session_factory, query, foreign_table, ref_table_populated):
+    def test_unordered_query(self, session_factory, query, foreign_table, ref_table_populated, for_table_populated):
         self.unordered_query(session_factory, query)
 
 
-class TestBasicQuery(multicorn_test.MulticornBaseTest):
-    @classmethod
-    def table_columns(cls):
+class TestOriginalQueryFromMulticorn(multicorn_test.MulticornBaseTest):
+
+    @pytest.fixture(scope="class")
+    def table_columns(self, request):
         return 'id integer, adate date, atimestamp timestamp, anumeric numeric, avarchar varchar'
 
     @classmethod
-    def sample_data(cls):
+    def sample_io(cls):
         output = io.BytesIO('''id,adate,atimestamp,anumeric,avarchar
 1,'1980-01-01','1980-01-01  11:01:21.132912',3.4,'Test'
 2,'1990-03-05','1998-03-02  10:40:18.321023',12.2,'Another Test'
@@ -114,44 +191,32 @@ class TestBasicQuery(multicorn_test.MulticornBaseTest):
     # --------------------------------------------------------------------------
     # @pytest.mark.skip
     @pytest.mark.parametrize("query", [
-        '''SELECT * from {0} order by avarchar''',
-        '''SELECT * from {0} order by avarchar desc''',
-        '''SELECT * from {0} order by avarchar desc nulls first''',
-        '''SELECT * from {0} order by avarchar desc nulls last''',
-        '''SELECT * from {0} order by avarchar nulls first''',
-        '''SELECT * from {0} order by avarchar nulls last''',
-        '''SELECT * from {0} order by anumeric'''])
+        '''SELECT * from {table_name} order by avarchar''',
+        '''SELECT * from {table_name} order by avarchar desc''',
+        '''SELECT * from {table_name} order by avarchar desc nulls first''',
+        '''SELECT * from {table_name} order by avarchar desc nulls last''',
+        '''SELECT * from {table_name} order by avarchar nulls first''',
+        '''SELECT * from {table_name} order by avarchar nulls last''',
+        '''SELECT * from {table_name} order by anumeric'''])
     def test_ordered_query(self, session_factory, query, foreign_table, ref_table_populated):
         self.ordered_query(session_factory, query)
 
     # @pytest.mark.xfail
     # @pytest.mark.skip
     @pytest.mark.parametrize("query", [
-            '''SELECT * FROM {0}''',
-            '''SELECT id,atimestamp FROM {0}''',
-            '''SELECT * FROM {0} WHERE avarchar IS NULL''',
-            '''SELECT * FROM {0} WHERE avarchar IS NOT NULL''',
-            '''SELECT * from {0} where adate > '1970-01-02'::date''',
-            '''SELECT * from {0} where adate between '1970-01-01' and '1980-01-01' ''',
-            '''SELECT * from {0} where anumeric > 0''',
-            '''SELECT * from {0} where avarchar not like '%%test' ''',
-            '''SELECT * from {0} where avarchar like 'Another%%' ''',
-            '''SELECT * from {0} where avarchar ilike 'Another%%' ''',
-            '''SELECT * from {0} where avarchar not ilike 'Another%%' ''',
-            '''SELECT * from {0} where id in (1,2)''',
-            '''SELECT * from {0} where id not in (1, 2)''',
+        '''SELECT * FROM {table_name}''',
+        '''SELECT id,atimestamp FROM {table_name}''',
+        '''SELECT * FROM {table_name} WHERE avarchar IS NULL''',
+        '''SELECT * FROM {table_name} WHERE avarchar IS NOT NULL''',
+        '''SELECT * from {table_name} where adate > '1970-01-02'::date''',
+        '''SELECT * from {table_name} where adate between '1970-01-01' and '1980-01-01' ''',
+        '''SELECT * from {table_name} where anumeric > 0''',
+        '''SELECT * from {table_name} where avarchar not like '%%test' ''',
+        '''SELECT * from {table_name} where avarchar like 'Another%%' ''',
+        '''SELECT * from {table_name} where avarchar ilike 'Another%%' ''',
+        '''SELECT * from {table_name} where avarchar not ilike 'Another%%' ''',
+        '''SELECT * from {table_name} where id in (1,2)''',
+        '''SELECT * from {table_name} where id not in (1, 2)''',
         ])
     def test_unordered_query(self, session_factory, query, foreign_table, ref_table_populated):
         self.unordered_query(session_factory, query)
-
-    # @pytest.mark.parametrize("params_x", ['x_1', 'x_2'])
-    # def test_check_params_single(self, params_x):
-    #     print "testing %s", (params_x)
-    #     assert 0, "Assuming we got params_x: %s" % (params_x)
-    #
-    # @pytest.mark.parametrize("params_y", ['y_1', 'y_2'])
-    # @pytest.mark.parametrize("params_x", ['x_1', 'x_2'])
-    # def test_check_params_double(self, params_x, params_y):
-    #     print "testing x: %s", (params_x)
-    #     print "testing y: %s", (params_y)
-    #     assert 0, "Assuming we got params_x: %s, params_y:%s" % (params_x, params_y)
