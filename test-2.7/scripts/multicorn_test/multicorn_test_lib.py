@@ -1,28 +1,14 @@
 import pytest
+import collections
+import csv
 from sqlalchemy.sql import text
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-import collections
-
-import csv
-
-from sqlalchemy.ext.declarative import declarative_base
-
-# TODO: Move this into the class (if possible)
-Base = declarative_base()
+from sqlalchemy.pool import NullPool
+from sqlalchemy.schema import Table, MetaData
 
 
 class MulticornBaseTest:
-    # Create fixture abstract for executing Foreign table setup
-    @pytest.fixture(scope="class")
-    def for_table_populated(self, request, session_factory, ref_table):
-        print("Populate for_table")
 
-        def fin():
-            print("Cleanup for_table")
-
-        request.addfinalizer(fin)
-        return  # provide the fixture value
 
     # TODO: Make this into a property
     @classmethod
@@ -34,54 +20,73 @@ class MulticornBaseTest:
     def for_table_name(cls):
         return 'query_for'
 
+
+    # ==========================================================================
+    #  Database connection fixtures
+    # ==========================================================================
+
     @pytest.fixture(scope="module")
     def db_engine(self, request, username, password, db):
-        print("Connecting to PG Engine")
-        engine = create_engine('postgresql://%s:%s@localhost:5432/%s' % (username, password, db), echo=True)
+        """Fixture for creating a database engine.  Requires username, password and db fixtures to be added."""
+        print "Creating SQLAlchemy DB engine"
+        engine = create_engine('postgresql://%s:%s@localhost:5432/%s' % (username, password, db), echo=True, poolclass=NullPool)
 
         def fin():
+            print "Removing SQLAlchemy DB engine"
             engine.dispose()
-            print("Closed PG Engine")
-
         request.addfinalizer(fin)
-        return engine  # provide the fixture value
+
+        return engine
+
 
     @pytest.fixture(scope="module")
-    def session_factory(self, request, db_engine):
-        print("Creating and binding Session factory")
-        Session = sessionmaker(bind=db_engine, autoflush=False)
-
-        return Session  # provide the fixture value
-
-    def test_session_factory(self, session_factory):
-        self.exec_return_empty(session_factory, 'SELECT')
-
-    @pytest.fixture(scope="class")
-    def ref_table(self, request, session_factory, db_engine, table_columns):
-        self.exec_sql(session_factory, '''
-            CREATE TABLE {0} (
-                {1}
-            );'''.format(self.ref_table_name(), table_columns))
-
-        Base.metadata.reflect(bind=db_engine, only=[self.ref_table_name()])
-
-        ref_table = Base.metadata.tables[self.ref_table_name()]
+    def connection(self, request, db_engine):
+        """Fixture for connecting to the database"""
+        print "Opening DB connection"
+        conn = db_engine.connect()
 
         def fin():
-            Base.metadata.remove(ref_table)
-            self.exec_sql(session_factory, 'DROP TABLE {0}'.format(self.ref_table_name()))
+            conn.close()
+            db_engine.dispose()
+            print "Closed DB connection"
+        request.addfinalizer(fin)
 
+        return conn
+
+
+    @pytest.fixture(scope="module")
+    def metadata(self, request, db_engine, connection):
+        """Fixture for creating metadata for the database"""
+        metadata = MetaData(bind=db_engine)
+        return metadata
+
+
+    # ==========================================================================
+    #  Reference table fixtures
+    # ==========================================================================
+
+    @pytest.fixture(scope="class")
+    def ref_table(self, request, connection, db_engine, metadata, table_columns):
+        """ Fixture for creating a reference table.
+            This is a native PostgreSQL table, against which the results from the foreign table are compared
+        """
+
+        self.exec_sql(connection, '''CREATE TABLE {0} ( {1} );'''.format(self.ref_table_name(), table_columns))
+        # add table to metadata
+        ref_table = Table(self.ref_table_name(), metadata, autoload=True, autoload_with=db_engine)
+
+        def fin():
+            metadata.remove(ref_table)
+            self.exec_sql(connection, 'DROP TABLE {0}'.format(self.ref_table_name()))
         request.addfinalizer(fin)
 
         return ref_table
 
-    def test_ref_table(self, session_factory, ref_table):
-        (keys, values) = self.exec_return_value(session_factory, 'SELECT * FROM {0}'.format(self.ref_table_name()))
-        assert len(values) == 0, 'Expecting %s to be empty, found %s' % (self.ref_table_name(), values)
 
-    @pytest.fixture(scope="function")
-    def ref_table_populated(self, request, session_factory, ref_table):
-        session = session_factory()
+    @pytest.fixture(scope="class")
+    def ref_table_populated(self, request, connection, ref_table):
+        """Fixture for creating a populated reference table"""
+
         noneValue = '<None>'
         with self.sample_io() as csvfile:
             spamreader = csv.DictReader(csvfile, delimiter=',', quotechar='\'')
@@ -89,39 +94,44 @@ class MulticornBaseTest:
                 # Fake a NULL into the CSV as python CSV does not support Null entries
                 # http://stackoverflow.com/questions/11379300/csv-reader-behavior-with-none-and-empty-string
                 actualRow = {item[0]: item[1] for item in row.items() if item[1] != noneValue}
-
                 temp = ref_table.insert().values(**actualRow)
-                session.execute(temp)
-        assert session.is_active, 'Query did not complete and expects a rollback: %s' % (query)
-        session.commit()
-        session.close()
+                connection.execute(temp)
+        #assert session.is_active, 'Query did not complete and expects a rollback: %s' % (query)
 
         def fin():
-            self.exec_sql(session_factory, 'DELETE FROM {0}'.format(self.ref_table_name()))
+            self.exec_sql(connection, 'DELETE FROM {0}'.format(self.ref_table_name()))
 
         request.addfinalizer(fin)
 
-    def test_ref_table_populated(self, session_factory, ref_table_populated):
-        (keys, values) = self.exec_return_value(session_factory, 'SELECT * FROM {0}'.format(self.ref_table_name()))
+    def test_ref_table_populated(self, connection, ref_table_populated):
+        (keys, values) = self.exec_return_value(connection, 'SELECT * FROM {0}'.format(self.ref_table_name()))
         assert len(values) > 0, 'Expecting %s to have data, found %s' % (self.ref_table_name(), values)
 
-    @pytest.fixture(scope='function')
-    def multicorn(self, request, session_factory):
-        self.exec_no_return(session_factory, '''CREATE EXTENSION multicorn''')
+
+    # ==========================================================================
+    #  Foreign table fixtures
+    # ==========================================================================
+
+    @pytest.fixture(scope='class')
+    def multicorn(self, request, connection):
+        """Fixture for creating multicorn extension"""
+
+        self.exec_no_return(connection, '''CREATE EXTENSION IF NOT EXISTS multicorn''')
 
         def fin():
-            self.exec_no_return(session_factory, '''DROP EXTENSION multicorn''')
-
+            self.exec_no_return(connection, '''DROP EXTENSION multicorn''')
         request.addfinalizer(fin)
+
         return None
 
-    def test_multicorn(self, session_factory, multicorn):
-        (keys, values) = self.exec_return_value(session_factory, "SELECT * FROM pg_catalog.pg_extension WHERE extname='multicorn'")
+    def test_multicorn(self, connection, multicorn):
+        (keys, values) = self.exec_return_value(connection, "SELECT * FROM pg_catalog.pg_extension WHERE extname='multicorn'")
         assert len(values) == 1, 'Expecting one record got %s' % (values)
 
-    @pytest.fixture(scope='function')
-    def helper_function(self, request, session_factory, multicorn):
-        self.exec_no_return(session_factory, '''
+
+    @pytest.fixture(scope='class')
+    def foreign_server_function(self, request, connection, multicorn):
+        self.exec_no_return(connection, '''
             create or replace function create_foreign_server(fdw_type TEXT) returns void as $block$
               DECLARE
                 current_db varchar;
@@ -138,30 +148,37 @@ class MulticornBaseTest:
             ''')
 
         def fin():
-            self.exec_no_return(session_factory, '''DROP function create_foreign_server(fdw_type TEXT)''')
+            self.exec_no_return(connection, '''DROP function create_foreign_server(fdw_type TEXT)''')
         request.addfinalizer(fin)
         return None
 
-    def test_helper_function(self, session_factory, helper_function):
-        (keys, values) = self.exec_return_value(session_factory, "SELECT * FROM information_schema.routines WHERE routine_type='FUNCTION' AND specific_schema='public' AND routine_name='create_foreign_server'")
+    def test_foreign_server_function(self, connection, foreign_server_function):
+        (keys, values) = self.exec_return_value(connection, "SELECT * FROM information_schema.routines WHERE routine_type='FUNCTION' AND specific_schema='public' AND routine_name='create_foreign_server'")
         assert len(values) == 1, 'Expecting one record got %s' % (values)
 
-    @pytest.fixture(scope='function')
-    def foreign_server(self, request, session_factory, helper_function, fdw):
-        (keys, values) = self.exec_return_value(session_factory, '''SELECT create_foreign_server('{0}')'''.format(fdw))
+
+    @pytest.fixture(scope='class')
+    def foreign_server(self, request, connection, foreign_server_function, fdw):
+        """Fixture to create the foreign server for connecting to external database via psql """
+
+        (keys, values) = self.exec_return_value(connection, '''SELECT create_foreign_server('{0}')'''.format(fdw))
         assert 1, "Do not care about return keys or values"
 
         def fin():
-            self.exec_no_return(session_factory, '''DROP SERVER multicorn_srv''')
+            self.exec_no_return(connection, '''DROP SERVER multicorn_srv''')
         request.addfinalizer(fin)
+
         return None
 
-    def test_foreign_server(self, session_factory, foreign_server):
-        (keys, values) = self.exec_return_value(session_factory, "SELECT * FROM information_schema.foreign_servers WHERE foreign_server_name='multicorn_srv'")
+    def test_foreign_server(self, connection, foreign_server):
+        (keys, values) = self.exec_return_value(connection, "SELECT * FROM information_schema.foreign_servers WHERE foreign_server_name='multicorn_srv'")
         assert len(values) == 1, 'Expecting one record got %s' % (values)
 
-    @pytest.fixture
-    def foreign_table(self, request, session_factory, ref_table, foreign_server, password, fdw_options, table_columns):
+
+    @pytest.fixture(scope='class')
+    def foreign_table(self, request, connection, ref_table, foreign_server, password, fdw_options, table_columns):
+        """Fixture to create the foreign table we will test against"""
+
         print("Looking at fdw_options:%s" % (fdw_options))
         fdw_options_expanded = fdw_options.format(
             for_table_name=self.for_table_name(),
@@ -169,7 +186,7 @@ class MulticornBaseTest:
             password=password,
             )
 
-        self.exec_no_return(session_factory, '''
+        self.exec_no_return(connection, '''
             create foreign table {for_table_name} (
                 {columns}
             ) server multicorn_srv options (
@@ -178,50 +195,69 @@ class MulticornBaseTest:
             '''.format(for_table_name=self.for_table_name(), columns=table_columns, fdw_options=fdw_options_expanded))
 
         def fin():
-            self.exec_no_return(session_factory, '''DROP FOREIGN TABLE {for_table_name}'''.format(for_table_name=self.for_table_name()))
+            self.exec_no_return(connection, '''DROP FOREIGN TABLE {for_table_name}'''.format(for_table_name=self.for_table_name()))
         request.addfinalizer(fin)
+
         return None
 
-    def test_foreign_table(self, session_factory, foreign_table):
-        (keys, values) = self.exec_return_value(session_factory, "SELECT * FROM information_schema.foreign_tables WHERE foreign_table_name='{0}'".format(self.for_table_name()))
+    def test_foreign_table(self, connection, foreign_table):
+        (keys, values) = self.exec_return_value(connection, "SELECT * FROM information_schema.foreign_tables WHERE foreign_table_name='{0}'".format(self.for_table_name()))
         assert len(values) == 1, 'Expecting one record got %s' % (values)
 
+
+    @pytest.fixture(scope="class")
+    def for_table_populated(self, request, connection, ref_table):
+        """
+            Fixture to populate the foreign table with data.  Should be overriden in child class.
+            The fixture should:
+              - connect to the external database
+              - set up the test table (if necessary)
+              - populate it with the same data as the ref table
+              - clean up and remove the table and add finalizer
+              - doesn't need to return anything
+        """
+        print("Populate for_table")
+
+        def fin():
+            print("Cleanup for_table")
+
+        request.addfinalizer(fin)
+
+
     # ==========================================================================
-    # Helper Methods
+    #  Utility Methods
     # ==========================================================================
-    def exec_sql(self, session_factory, query):
-        session = session_factory()
-        sqlReturn = session.execute(query)
-        assert session.is_active, 'Query did not complete and expects a rollback: %s' % (query)
-        session.commit()
-        session.close()
-        del session
+
+    def exec_sql(self, connection, query):
+
+        #conn_count = connection.execute('SELECT sum(numbackends) FROM pg_stat_database;')
+        #conn_count = conn_count.fetchall()
+        #print 'mattout running query %s, %s connections' % (query,conn_count[0][0])
+
+        sqlReturn = connection.execute(query)
         return sqlReturn
 
-    def exec_no_return(self, session_factory, query):
-        returnVal = self.exec_sql(session_factory, query)
+    def exec_no_return(self, connection, query):
+        returnVal = self.exec_sql(connection, query)
         assert not returnVal.returns_rows, "Not expecting any rows"
-        returnVal.close()
 
-    def exec_return_empty(self, session_factory, query):
-        returnVal = self.exec_sql(session_factory, query)
+    def exec_return_empty(self, connection, query):
+        returnVal = self.exec_sql(connection, query)
         assert returnVal.returns_rows, "Expecting rows"
         assert returnVal.rowcount == 1, "Expecting a single row"
         assert len(returnVal.keys()) == 0, "Should not return any columns, found %s" % (returnVal.keys())
-        returnVal.close()
 
-    def exec_return_value(self, session_factory, query):
-        returnVal = self.exec_sql(session_factory, query)
+    def exec_return_value(self, connection, query):
+        returnVal = self.exec_sql(connection, query)
         assert returnVal.returns_rows, "Expecting rows"
         return (returnVal.keys(), returnVal.fetchall())
-        returnVal.close()
 
-    def unordered_query(self, session_factory, query):
+    def unordered_query(self, connection, query):
         query_ref = query.format(table_name=self.ref_table_name())
         query_for = query.format(table_name=self.for_table_name())
 
-        return_ref = self.exec_sql(session_factory, query_ref)
-        return_for = self.exec_sql(session_factory, query_for)
+        return_ref = self.exec_sql(connection, query_ref)
+        return_for = self.exec_sql(connection, query_for)
 
         assert return_ref.returns_rows == return_for.returns_rows, "Expecting ref and for to have matching returns_rows"
 
@@ -229,24 +265,19 @@ class MulticornBaseTest:
             return
 
         assert return_ref.rowcount == return_for.rowcount, "Expecting ref and for to have same number of returning rows"
-
-        # result_ref = return_ref.fetchall()
-        # result_for = return_for.fetchall()
 
         collection_ref = collections.Counter([tuple(myval.values()) for myval in return_ref.fetchall()])
         collection_for = collections.Counter([tuple(myval.values()) for myval in return_for.fetchall()])
 
         print('Checking match of ref:%s == for:%s' % (collection_ref, collection_for))
         assert collection_ref == collection_for, 'Expecting results from both queries to be identical apart from order'
-        return_ref.close()
-        return_for.close()
 
-    def ordered_query(self, session_factory, query):
+    def ordered_query(self, connection, query):
         query_ref = query.format(table_name=self.ref_table_name())
         query_for = query.format(table_name=self.for_table_name())
 
-        return_ref = self.exec_sql(session_factory, query_ref)
-        return_for = self.exec_sql(session_factory, query_for)
+        return_ref = self.exec_sql(connection, query_ref)
+        return_for = self.exec_sql(connection, query_for)
 
         assert return_ref.returns_rows == return_for.returns_rows, "Expecting ref and for to have matching returns_rows"
 
@@ -255,11 +286,6 @@ class MulticornBaseTest:
 
         assert return_ref.rowcount == return_for.rowcount, "Expecting ref and for to have same number of returning rows"
 
-        # result_ref = return_ref.fetchall()
-        # result_for = return_for.fetchall()
-
         for (row_ref, row_for) in zip(return_ref.fetchall(), return_for.fetchall()):
             print('Checking match of ref:%s == for:%s' % (row_ref, row_for))
             assert row_ref == row_for, 'Rows should match %s == %s' % (row_ref, row_for)
-        return_ref.close()
-        return_for.close()

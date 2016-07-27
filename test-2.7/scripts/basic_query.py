@@ -1,13 +1,10 @@
-import multicorn_test
-
+from multicorn_test import MulticornBaseTest
 import pytest
 import os
 import io
 
 
-# aeHiveUdv.aeHiveUdv
-
-class TestVarchar(multicorn_test.MulticornBaseTest):
+class TestVarchar(MulticornBaseTest):
 
     @pytest.fixture(scope="class")
     def table_columns(self, request):
@@ -30,11 +27,24 @@ class TestVarchar(multicorn_test.MulticornBaseTest):
         '''SELECT * FROM {table_name} WHERE value1 = value2''',
         '''SELECT * FROM {table_name} WHERE value1 = 'value2' ''',
         ])
-    def test_unordered_query(self, session_factory, query, foreign_table, ref_table_populated, for_table_populated):
-        self.unordered_query(session_factory, query)
+    def test_unordered_query(self, connection, query, foreign_table, ref_table_populated, for_table_populated):
+        self.unordered_query(connection, query)
 
 
-class TestInt(multicorn_test.MulticornBaseTest):
+class TestFDW(MulticornBaseTest):
+    """
+        This class runs our suite of SQL tests against a foreign data wrapper.
+        The test sets up two tables:
+         - a reference table in PostgreSQL
+         - a foreign table in the external database
+        Each SQL test is run against both, and the results compared
+
+        By default the foreign table is setup to point at the reference table (via the psql FDW), so all tests should pass
+        To test a new foreign data wrapper, inherit this class and override:
+         - for_table_populated
+         - fdw
+         - fdw_options
+    """
 
     # @pytest.fixture(scope="class")
     # def data_type_value1(self, request):
@@ -86,8 +96,8 @@ class TestInt(multicorn_test.MulticornBaseTest):
         '''SELECT * from {table_name} order by value1 nulls first''',
         '''SELECT * from {table_name} order by value1 nulls last''',
         ])
-    def test_ordered_query(self, session_factory, query, foreign_table, ref_table_populated, for_table_populated):
-        self.ordered_query(session_factory, query)
+    def test_ordered_query(self, connection, query, foreign_table, ref_table_populated, for_table_populated):
+        self.ordered_query(connection, query)
 
     # Build out the operators and columns for the table
     @pytest.mark.parametrize('operator', [
@@ -110,8 +120,8 @@ class TestInt(multicorn_test.MulticornBaseTest):
     @pytest.mark.parametrize('query', [
         '''SELECT * from {table_name} where {left_value} {operator} {right_value}''',
         ])
-    def test_operators(self, left_value, operator, right_value, session_factory, query, foreign_table, ref_table_populated, for_table_populated):
-        self.unordered_query(session_factory, query.format(table_name='{table_name}', left_value=left_value, operator=operator, right_value=right_value))
+    def test_operators(self, left_value, operator, right_value, connection, query, foreign_table, ref_table_populated, for_table_populated):
+        self.unordered_query(connection, query.format(table_name='{table_name}', left_value=left_value, operator=operator, right_value=right_value))
 
     # Build out example queries
     @pytest.mark.parametrize("query", [
@@ -165,11 +175,11 @@ class TestInt(multicorn_test.MulticornBaseTest):
         # Test Group operator
         '''SELECT count(*) FROM {table_name} GROUP BY value1''',
         ])
-    def test_unordered_query(self, session_factory, query, foreign_table, ref_table_populated, for_table_populated):
-        self.unordered_query(session_factory, query)
+    def test_unordered_query(self, connection, query, foreign_table, ref_table_populated, for_table_populated):
+        self.unordered_query(connection, query)
 
 
-class TestOriginalQueryFromMulticorn(multicorn_test.MulticornBaseTest):
+class TestOriginalQueryFromMulticorn(MulticornBaseTest):
 
     @pytest.fixture(scope="class")
     def table_columns(self, request):
@@ -198,8 +208,8 @@ class TestOriginalQueryFromMulticorn(multicorn_test.MulticornBaseTest):
         '''SELECT * from {table_name} order by avarchar nulls first''',
         '''SELECT * from {table_name} order by avarchar nulls last''',
         '''SELECT * from {table_name} order by anumeric'''])
-    def test_ordered_query(self, session_factory, query, foreign_table, ref_table_populated):
-        self.ordered_query(session_factory, query)
+    def test_ordered_query(self, connection, query, foreign_table, ref_table_populated):
+        self.ordered_query(connection, query)
 
     # @pytest.mark.xfail
     # @pytest.mark.skip
@@ -218,5 +228,5 @@ class TestOriginalQueryFromMulticorn(multicorn_test.MulticornBaseTest):
         '''SELECT * from {table_name} where id in (1,2)''',
         '''SELECT * from {table_name} where id not in (1, 2)''',
         ])
-    def test_unordered_query(self, session_factory, query, foreign_table, ref_table_populated):
-        self.unordered_query(session_factory, query)
+    def test_unordered_query(self, connection, query, foreign_table, ref_table_populated):
+        self.unordered_query(connection, query)
