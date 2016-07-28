@@ -71,7 +71,8 @@ class MulticornBaseTest:
             This is a native PostgreSQL table, against which the results from the foreign table are compared
         """
 
-        self.exec_sql(connection, '''CREATE TABLE {0} ( {1} );'''.format(self.ref_table_name(), table_columns))
+        define_cols = ", ".join(["%s %s" % (k,v) for k,v in table_columns.iteritems()])
+        self.exec_sql(connection, '''CREATE TABLE {0} ( {1} );'''.format(self.ref_table_name(), define_cols))
         # add table to metadata
         ref_table = Table(self.ref_table_name(), metadata, autoload=True, autoload_with=db_engine)
 
@@ -186,13 +187,14 @@ class MulticornBaseTest:
             password=password,
             )
 
+        define_cols = ", ".join(["%s %s" % (k,v) for k,v in table_columns.iteritems()])
         self.exec_no_return(connection, '''
             create foreign table {for_table_name} (
                 {columns}
             ) server multicorn_srv options (
                 {fdw_options}
             )
-            '''.format(for_table_name=self.for_table_name(), columns=table_columns, fdw_options=fdw_options_expanded))
+            '''.format(for_table_name=self.for_table_name(), columns=define_cols, fdw_options=fdw_options_expanded))
 
         def fin():
             self.exec_no_return(connection, '''DROP FOREIGN TABLE {for_table_name}'''.format(for_table_name=self.for_table_name()))
