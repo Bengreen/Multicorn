@@ -2,6 +2,8 @@ from multicorn_test import MulticornBaseTest
 import pytest
 import os
 import io
+import random
+import string
 
 
 class TestFDW(MulticornBaseTest):
@@ -282,7 +284,8 @@ class TestFDW(MulticornBaseTest):
         '-1.23'
         ])
     @pytest.mark.parametrize("query", [
-        '''SELECT * FROM {table_name} WHERE {column1} {operator} {column2}'''
+        '''SELECT * FROM {table_name} WHERE {column1} {operator} {column2}''',
+        '''SELECT * FROM {table_name} WHERE NOT {column1} {operator} {column2}'''
         ])
     def test_where_operators_numbers(self, column1, operator, column2, query, connection, foreign_table, ref_table_populated, for_table_populated):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, operator=operator, column2=column2))
@@ -312,7 +315,8 @@ class TestFDW(MulticornBaseTest):
         "'1986-12-19 12:00:00'",
         ])
     @pytest.mark.parametrize("query", [
-        '''SELECT * FROM {table_name} WHERE {column1} {operator} {column2}'''
+        '''SELECT * FROM {table_name} WHERE {column1} {operator} {column2}''',
+        '''SELECT * FROM {table_name} WHERE NOT {column1} {operator} {column2}'''
         ])
     def test_where_operators_times(self, column1, operator, column2, query, connection, foreign_table, ref_table_populated, for_table_populated):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, operator=operator, column2=column2))
@@ -339,7 +343,8 @@ class TestFDW(MulticornBaseTest):
         'real2'
         ])
     @pytest.mark.parametrize("query", [
-        '''SELECT * FROM {table_name} WHERE {column1} > 0 {operator} {column2} > 0'''
+        '''SELECT * FROM {table_name} WHERE {column1} > 0 {operator} {column2} > 0''',
+        '''SELECT * FROM {table_name} WHERE NOT {column1} > 0 {operator} {column2} > 0'''
         ])
     def test_where_logical_operators(self, column1, operator, column2, query, connection, foreign_table, ref_table_populated, for_table_populated):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, operator=operator, column2=column2))
@@ -417,147 +422,171 @@ class TestFDW(MulticornBaseTest):
     def test_string_like(self, regex, query, connection, foreign_table, ref_table_populated, for_table_populated):
         self.unordered_query(connection, query.format(table_name='{table_name}', regex=regex))
 
-
-#    @pytest.mark.parametrize("query", [
-#        pytest.mark.xfail(reason="deliberate random ORDER")('''SELECT * from {table_name} order by RANDOM()'''),
-#        '''SELECT * from {table_name} order by value1''',
-#        '''SELECT * from {table_name} order by value1 desc''',
-#        '''SELECT * from {table_name} order by value1 desc nulls first''',
-#        '''SELECT * from {table_name} order by value1 desc nulls last''',
-#        '''SELECT * from {table_name} order by value1 nulls first''',
-#        '''SELECT * from {table_name} order by value1 nulls last''',
-#        ])
-#    def test_ordered_query(self, connection, query, foreign_table, ref_table_populated, for_table_populated):
-#        self.ordered_query(connection, query)
-#
-#    # Build out the operators and columns for the table
-#    @pytest.mark.parametrize('operator', [
-#        '>',
-#        '<',
-#        '=',
-#        '!=',
-#        '<>',
-#        '>=',
-#        '<=',
-#        ])
-#    @pytest.mark.parametrize('left_value', [
-#        'value1',
-#        'value2',
-#        ])
-#    @pytest.mark.parametrize('right_value', [
-#        'value1',
-#        'value2',
-#        ])
-#    @pytest.mark.parametrize('query', [
-#        '''SELECT * from {table_name} where {left_value} {operator} {right_value}''',
-#        ])
-#    def test_operators(self, left_value, operator, right_value, connection, query, foreign_table, ref_table_populated, for_table_populated):
-#        self.unordered_query(connection, query.format(table_name='{table_name}', left_value=left_value, operator=operator, right_value=right_value))
-#
-#    # Build out example queries
-#    @pytest.mark.parametrize("query", [
-#        # Force fail tests to confirm that the test framework is operating correctly
-#        pytest.mark.xfail(reason="deliberate random WHERE")('''SELECT * from {table_name} WHERE RANDOM() < 0.5'''),
-#        pytest.mark.xfail(reason="deliberate random ORDER")('''SELECT * from {table_name} ORDER BY RANDOM() LIMIT 5'''),
-#
-#        # Test for quotes in query
-#        '''SELECT * FROM {table_name} WHERE value1 = value1 ''',
-#
-#        # Simple query tests to confirm basic query operations
-#        '''SELECT * FROM {table_name}''',
-#        '''SELECT id,value1 FROM {table_name}''',
-#        '''SELECT count(*) FROM {table_name}''',
-#        # Test for presence of NULL
-#        '''SELECT * FROM {table_name} WHERE value1 IS NULL''',
-#        '''SELECT * FROM {table_name} WHERE value1 IS NOT NULL''',
-#        # Test comparison with integers (explicit conversion)
-#        '''SELECT * from {table_name} where value1 > '1'::INTEGER''',
-#        '''SELECT * from {table_name} where value1 < '1'::INTEGER''',
-#        '''SELECT * from {table_name} where value1 = '1'::INTEGER''',
-#        '''SELECT * from {table_name} where value1 != '1'::INTEGER''',
-#        '''SELECT * from {table_name} where value1 >= '1'::INTEGER''',
-#        '''SELECT * from {table_name} where value1 >= '1'::INTEGER''',
-#        # Test comparison with integers (implicit conversion)
-#        '''SELECT * from {table_name} where value1 > 1''',
-#        '''SELECT * from {table_name} where value1 < 1''',
-#        '''SELECT * from {table_name} where value1 = 1''',
-#        '''SELECT * from {table_name} where value1 != 1''',
-#        '''SELECT * from {table_name} where value1 >= 1''',
-#        '''SELECT * from {table_name} where value1 <= 1''',
-#        # Test comparison with float (implicit conversion)
-#        '''SELECT * from {table_name} where value1 > 1.0''',
-#        '''SELECT * from {table_name} where value1 < 1.0''',
-#        '''SELECT * from {table_name} where value1 = 1.0''',
-#        '''SELECT * from {table_name} where value1 != 1.0''',
-#        '''SELECT * from {table_name} where value1 >= 1.0''',
-#        '''SELECT * from {table_name} where value1 <= 1.0''',
-#        # Test comparison with integer (from value2)
-#        '''SELECT * from {table_name} where value1 > value2''',
-#        '''SELECT * from {table_name} where value1 < value2''',
-#        '''SELECT * from {table_name} where value1 = value2''',
-#        '''SELECT * from {table_name} where value1 != value2''',
-#        '''SELECT * from {table_name} where value1 >= value2''',
-#        '''SELECT * from {table_name} where value1 <= value2''',
-#        # Test between operator
-#        '''SELECT * from {table_name} where value1 between 1 and 2''',
-#        # Test in, not in operator
-#        '''SELECT * from {table_name} where value1 in (1,2)''',
-#        '''SELECT * from {table_name} where value1 not in (1, 2)''',
-#        # Test Group operator
-#        '''SELECT count(*) FROM {table_name} GROUP BY value1''',
-#        ])
-#    def test_unordered_query(self, connection, query, foreign_table, ref_table_populated, for_table_populated):
-#        self.unordered_query(connection, query)
+    # Test out the IN operator
+    @pytest.mark.parametrize("query", [
+        '''SELECT * FROM {table_name} WHERE string IN {string_list}''',
+        '''SELECT * FROM {table_name} WHERE NOT string IN {string_list}'''
+        ])
+    def test_string_in(self, query, connection, foreign_table, ref_table_populated, for_table_populated):
+        # TODO this list should be changed to match what's in data (should return some, not all or none)
+        string_list = "('%s')" % "','".join([''.join(random.choice(string.lowercase) for i in range(3)) for x in xrange(20)])
+        self.unordered_query(connection, query.format(table_name='{table_name}', string_list=string_list))
 
 
-#class TestOriginalQueryFromMulticorn(MulticornBaseTest):
-#
-#    @pytest.fixture(scope="class")
-#    def table_columns(self, request):
-#        return 'id integer, adate date, atimestamp timestamp, anumeric numeric, avarchar varchar'
+    # --------------------------------------------------- #
+    # ---- Test some predicate and scalar subqueries ---- #
+    # --------------------------------------------------- #
 
-#    @classmethod
-#    def sample_io(cls):
-#        output = io.BytesIO('''id,adate,atimestamp,anumeric,avarchar
-#1,'1980-01-01','1980-01-01  11:01:21.132912',3.4,'Test'
-#2,'1990-03-05','1998-03-02  10:40:18.321023',12.2,'Another Test'
-#3,'1972-01-02','1972-01-02  16:12:54.000000',4000,'another Test'
-#4,'1922-11-02','1962-01-02  23:12:54.000000',-3000,<None>
-#''')
-#        return output
-#        # return open(os.path.dirname(__file__)+'/mixed_data.csv', 'rb')
-#
-#    # --------------------------------------------------------------------------
-#    # Tests start here
-#    # --------------------------------------------------------------------------
-#    # @pytest.mark.skip
-#    @pytest.mark.parametrize("query", [
-#        '''SELECT * from {table_name} order by avarchar''',
-#        '''SELECT * from {table_name} order by avarchar desc''',
-#        '''SELECT * from {table_name} order by avarchar desc nulls first''',
-#        '''SELECT * from {table_name} order by avarchar desc nulls last''',
-#        '''SELECT * from {table_name} order by avarchar nulls first''',
-#        '''SELECT * from {table_name} order by avarchar nulls last''',
-#        '''SELECT * from {table_name} order by anumeric'''])
-#    def test_ordered_query(self, connection, query, foreign_table, ref_table_populated):
-#        self.ordered_query(connection, query)
-#
-#    # @pytest.mark.xfail
-#    # @pytest.mark.skip
-#    @pytest.mark.parametrize("query", [
-#        '''SELECT * FROM {table_name}''',
-#        '''SELECT id,atimestamp FROM {table_name}''',
-#        '''SELECT * FROM {table_name} WHERE avarchar IS NULL''',
-#        '''SELECT * FROM {table_name} WHERE avarchar IS NOT NULL''',
-#        '''SELECT * from {table_name} where adate > '1970-01-02'::date''',
-#        '''SELECT * from {table_name} where adate between '1970-01-01' and '1980-01-01' ''',
-#        '''SELECT * from {table_name} where anumeric > 0''',
-#        '''SELECT * from {table_name} where avarchar not like '%%test' ''',
-#        '''SELECT * from {table_name} where avarchar like 'Another%%' ''',
-#        '''SELECT * from {table_name} where avarchar ilike 'Another%%' ''',
-#        '''SELECT * from {table_name} where avarchar not ilike 'Another%%' ''',
-#        '''SELECT * from {table_name} where id in (1,2)''',
-#        '''SELECT * from {table_name} where id not in (1, 2)''',
-#        ])
-#    def test_unordered_query(self, connection, query, foreign_table, ref_table_populated):
-#        self.unordered_query(connection, query)
+    # First predicate subqueries, then scalar subqueries, only with numerical types
+    @pytest.mark.parametrize("column1", [
+        'int1',
+        'int2',
+        'real1',
+        'real2'
+        ])
+    @pytest.mark.parametrize("function", [
+        'MAX',
+        'MIN',
+        'SUM',
+        'COUNT',
+        'AVG'
+        ])
+    @pytest.mark.parametrize("column2", [
+        'int1',
+        'int2',
+        'real1',
+        'real2'
+        ])
+    @pytest.mark.parametrize("query", [
+        '''SELECT * FROM {table_name} WHERE {column1} > (SELECT {function}({column2}) FROM {table_name} WHERE {column2} > 0)''',
+        '''SELECT {column1}, (SELECT {function}({column2}) FROM {table_name} WHERE {column2} > 0) AS {column2}_agg FROM {table_name}'''
+        ])
+    def test_subquery(self, column1, function, column2, query, connection, foreign_table, ref_table_populated, for_table_populated):
+        self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, function=function, column2=column2))
+
+
+    # ----------------------- #
+    # ---- Test ORDER BY ---- #
+    # ----------------------- #
+
+    # test out all the basic sort on one column stuff
+    @pytest.mark.parametrize("column1", [
+        'int1',
+        'real1',
+        'date1',
+        'timestamp1',
+        'string'
+        ])
+    @pytest.mark.parametrize("query", [
+        '''SELECT * FROM {table_name} ORDER BY 1''',
+        '''SELECT * FROM {table_name} ORDER BY {column1}''',
+        '''SELECT * FROM {table_name} ORDER BY {column1} LIMIT 10 OFFSET 10''',
+        '''SELECT * FROM {table_name} ORDER BY {column1} NULLS FIRST''',
+        '''SELECT * FROM {table_name} ORDER BY {column1} NULLS LAST''',
+        '''SELECT * FROM {table_name} ORDER BY {column1} DESC''',
+        '''SELECT * FROM {table_name} ORDER BY {column1} DESC NULLS FIRST''',
+        '''SELECT * FROM {table_name} ORDER BY {column1} DESC NULLS LAST'''
+        ])
+    def test_sort(self, column1, query, connection, foreign_table, ref_table_populated, for_table_populated):
+        self.ordered_query(connection, query.format(table_name='{table_name}', column1=column1))
+
+    # test out compound sorts
+    @pytest.mark.parametrize("column1", [
+        'int1',
+        'int2',
+        'real1',
+        'real2',
+        'date1',
+        'date2',
+        'timestamp1',
+        'timestamp2',
+        'string'
+        ])
+    @pytest.mark.parametrize("column2", [
+        'int1',
+        'int2',
+        'real1',
+        'real2',
+        'date1',
+        'date2',
+        'timestamp1',
+        'timestamp2',
+        'string'
+        ])
+    @pytest.mark.parametrize("query", [
+        '''SELECT * FROM {table_name} ORDER BY {column1}, {column2} '''
+        ])
+    def test_compound_sort(self, column1, column2, query, connection, foreign_table, ref_table_populated, for_table_populated):
+        self.ordered_query(connection, query.format(table_name='{table_name}', column1=column1, column2=column2))
+
+
+    # --------------------------- #
+    # ---- Test out GROUP BY ---- #
+    # --------------------------- #
+
+    # First test some basic GROUP BY stuff
+    # TODO need to think move about the string col.  Maybe have some actual groups in it so this does something
+    @pytest.mark.parametrize("column1", [ 
+        'string'
+        ])
+    @pytest.mark.parametrize("function", [
+        'COUNT',
+        'AVG',
+        'MAX',
+        'MIN',
+        'SUM'
+        ])
+    @pytest.mark.parametrize("column2", [
+        'int1',
+        'real1'
+        ])
+    @pytest.mark.parametrize("query", [
+        '''SELECT {column1}, {function}({column2}) FROM {table_name} GROUP BY {column1}''',
+        '''SELECT {column1}, {function}(DISTINCT {column2}) FROM {table_name} GROUP BY {column1}'''
+        ])
+    def test_basic_group1(self, column1, function, column2, query, connection, foreign_table, ref_table_populated, for_table_populated):
+        self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, function=function, column2=column2))
+
+    # Try grouping by sign of a numerical col instead of strings.  Also test dates
+    @pytest.mark.parametrize("column1", [
+        'int1',
+        'real1'
+        ])
+    @pytest.mark.parametrize("function", [
+        'COUNT',
+        'MAX',
+        'MIN'
+        ])
+    @pytest.mark.parametrize("column2", [
+        'int1',
+        'real1',
+        'date1',
+        'timestamp1'
+        ])
+    @pytest.mark.parametrize("query", [
+        '''SELECT SIGN({column1}) AS sign1, {function}({column2}) FROM {table_name} GROUP BY sign1''',
+        '''SELECT SIGN({column1}) AS sign1, {function}(DISTINCT {column2}) FROM {table_name} GROUP BY sign1'''
+        ])
+    def test_basic_group2(self, column1, function, column2, query, connection, foreign_table, ref_table_populated, for_table_populated):
+        self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, function=function, column2=column2))
+
+    # Test out the HAVING clause
+    @pytest.mark.parametrize("column1", [
+        'string'
+        ])
+    @pytest.mark.parametrize("function", [
+        'COUNT',
+        'MAX',
+        'MIN',
+        'SUM',
+        'AVG'
+        ])
+    @pytest.mark.parametrize("column2", [
+        'int1',
+        'real1',
+        ])
+    @pytest.mark.parametrize("query", [
+        '''SELECT {function}({column2}) FROM {table_name} GROUP BY {column1} HAVING COUNT({column1}) > 2'''
+        ])
+    def test_basic_group3(self, column1, function, column2, query, connection, foreign_table, ref_table_populated, for_table_populated):
+        self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, function=function, column2=column2))
