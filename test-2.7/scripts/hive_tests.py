@@ -99,7 +99,10 @@ class TestHiveFDW(TestFDW):
 
         # convert schema dicts to SQL schema
         external_table_schema = ', '.join(['%s %s' % (k,v) for k,v in for_table_columns.iteritems()])
-        view_schema = ", ".join(['cast (%s AS %s) AS %s' % (k,v,k) for k,v in for_table_columns.iteritems()])
+        # hack to allow null boolean types in a hive view
+        view_schema = ", ".join(['cast (%s AS %s) AS %s' % (k,v,k) for k,v in for_table_columns.iteritems() if not 'boolean' in k])
+        view_schema += ", CASE boolean_a WHEN 'TRUE' THEN TRUE WHEN 'FALSE' THEN FALSE ELSE NULL END AS boolean_a,"
+        view_schema += " CASE boolean_b WHEN 'TRUE' THEN TRUE WHEN 'FALSE' THEN FALSE ELSE NULL END AS boolean_b"
 
         # set up external table and view in Hive
         with conn.cursor() as cur:
@@ -130,7 +133,7 @@ class TestHiveFDW(TestFDW):
         # create a temp csv in the right format for hive from test_data
         # TODO break this out into a separate function, (same for the stuff above)
         noneValue = '<None>'
-        booleanMap = { 't': 'TRUE', 'f': 'FALSE', '': ''}
+        booleanMap = { 't': 'TRUE', 'f': 'FALSE', '': 'NULL'}
         cols = for_table_columns.keys()
         with self.sample_io() as csvfile:
             with open('/tmp/hive_test_data.csv', 'w') as hivefile:
