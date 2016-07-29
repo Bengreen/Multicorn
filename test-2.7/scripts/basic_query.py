@@ -74,6 +74,7 @@ class TestFDW(MulticornBaseTest):
     # ------------------------ #
     # --- Failing queries ---- #
     # ------------------------ #
+    @pytest.mark.basic
     @pytest.mark.parametrize("query", [
         pytest.mark.xfail(reason="deliberate random ORDER")('''SELECT * from {table_name} order by RANDOM()''')
         ])
@@ -81,6 +82,7 @@ class TestFDW(MulticornBaseTest):
         #import pdb; pdb.set_trace()
         self.ordered_query(connection, query)
 
+    @pytest.mark.basic
     @pytest.mark.parametrize("query", [
         pytest.mark.xfail(reason="deliberate random WHERE")('''SELECT * from {table_name} WHERE RANDOM() < 0.5'''),
         pytest.mark.xfail(reason="deliberate random ORDER and LIMIT")('''SELECT * from {table_name} ORDER BY RANDOM() LIMIT 5''')
@@ -93,6 +95,7 @@ class TestFDW(MulticornBaseTest):
     # ------------------------- #
     # ---- Very basic SQL  ---- #
     # ------------------------- #
+    @pytest.mark.basic
     @pytest.mark.parametrize("query", [
         '''SELECT * from {table_name}''',
         '''SELECT 1, * from {table_name} ''',
@@ -106,6 +109,7 @@ class TestFDW(MulticornBaseTest):
     # ------------------------ #
     # --- Basic SELECT SQL --- #
     # ------------------------ #
+    @pytest.mark.basic
     @pytest.mark.parametrize("column", [
         'tinyint_a',
         'smallint_a',
@@ -174,6 +178,7 @@ class TestFDW(MulticornBaseTest):
     # ---- Test SELECT arithmetic ---- #
     # -------------------------------- #
     # Only test arithmetic on the numerical columns (TODO maybe expand later to other types)
+    @pytest.mark.basic
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
         'smallint_a',
@@ -189,7 +194,7 @@ class TestFDW(MulticornBaseTest):
         ])
     @pytest.mark.parametrize("column2", [
         'tinyint_b',
-        #'smallint_b', # TODO leaving thes out for now, if we don't there are lots of overflow errors...
+        #'smallint_b', # TODO leaving these out for now, if we don't there are lots of overflow errors...
         #'int_b',
         #'bigint_b',
         #'float_b',
@@ -318,6 +323,7 @@ class TestFDW(MulticornBaseTest):
     # ------------------------------ #
 
     # First for numerical types
+    @pytest.mark.basic
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
         'smallint_a',
@@ -385,6 +391,7 @@ class TestFDW(MulticornBaseTest):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, operator=operator, column2=column2))
 
     # Then for string types
+    @pytest.mark.basic
     @pytest.mark.parametrize("column1", [
         'string_a',
         'varchar_a',
@@ -583,6 +590,7 @@ class TestFDW(MulticornBaseTest):
     # ----------------------- #
 
     # test out all the basic sort on one column stuff
+    @pytest.mark.basic
     @pytest.mark.parametrize("column1", [
         'smallint_a',
         'int_a',
