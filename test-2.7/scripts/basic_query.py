@@ -26,7 +26,6 @@ class TestFDW(MulticornBaseTest):
     # Test data setup
     # --------------------------------------------------------------------------
 
-    # TODO the test data we use needs more discussion/thought...
     @pytest.fixture(scope="class")
     def table_columns(self, request):
         cols = OrderedDict()
@@ -90,7 +89,14 @@ class TestFDW(MulticornBaseTest):
     def test_failing_unordered(self, connection, query, foreign_table, ref_table_populated, for_table_populated):
         self.unordered_query(connection, query)
 
-    # TODO add some failing queries for overflows
+    @pytest.mark.basic
+    @pytest.mark.parametrize("query", [
+        pytest.mark.xfail(reason="deliberate overflow of a small int (2 bytes)")('''SELECT smallint_a * 1000000 from {table_name}'''),
+        pytest.mark.xfail(reason="deliberate overflow of an integer (4 bytes)")('''SELECT int_a * 10000000000 from {table_name}'''),
+        pytest.mark.xfail(reason="deliberate overflow of an big int (8 bytes)")('''SELECT bigint_a * 10000000000 from {table_name}''')
+        ])
+    def test_failing_overflow(self, connection, query, foreign_table, ref_table_populated, for_table_populated):
+        self.unordered_query(connection, query)
 
     # ------------------------- #
     # ---- Very basic SQL  ---- #
@@ -177,7 +183,6 @@ class TestFDW(MulticornBaseTest):
     # -------------------------------- #
     # ---- Test SELECT arithmetic ---- #
     # -------------------------------- #
-    # Only test arithmetic on the numerical columns (TODO maybe expand later to other types)
     @pytest.mark.basic
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
@@ -193,13 +198,7 @@ class TestFDW(MulticornBaseTest):
         '-',
         ])
     @pytest.mark.parametrize("column2", [
-        'tinyint_b',
-        #'smallint_b', # TODO leaving these out for now, if we don't there are lots of overflow errors...
-        #'int_b',
-        #'bigint_b',
-        #'float_b',
-        #'double_b',
-        #'decimal_b',
+        'tinyint_b', # only test col + col arithmetic for tinyint to avoid overflows
         '2',
         '1',
         '0',
@@ -294,7 +293,7 @@ class TestFDW(MulticornBaseTest):
     # ------------------------------- #
     # ---- Test SELECT functions ---- #
     # ------------------------------- #
-    # TODO should probably add some other funcs in here e.g. exp, round, trunc, log etc.
+    # test out some functions on columns, check they're working ok
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
         'smallint_a',
@@ -314,8 +313,34 @@ class TestFDW(MulticornBaseTest):
         '''SELECT {function}({column1}) FROM {table_name}''',
         '''SELECT DISTINCT {function}({column1}) FROM {table_name}'''
         ])
-    def test_select_functions(self, column1, function, query, connection, foreign_table, ref_table_populated, for_table_populated):
+    def test_select_functions1(self, column1, function, query, connection, foreign_table, ref_table_populated, for_table_populated):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, function=function))
+
+    # Test DIV and POWER on ints
+    @pytest.mark.parametrize("column1", [
+        'tinyint_a',
+        'smallint_a',
+        'int_a',
+        'bigint_a'
+        ])
+    @pytest.mark.parametrize("query", [
+        '''SELECT DIV({column1}, 2) FROM {table_name}''',
+        '''SELECT POWER({column1}, 1) FROM {table_name}'''
+        ])
+    def test_select_functions2(self, column1, query, connection, foreign_table, ref_table_populated, for_table_populated):
+        self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1))
+
+    # And test POWER on floats
+    @pytest.mark.parametrize("column1", [
+        'float_a',
+        'double_a',
+        'decimal_a'
+        ])
+    @pytest.mark.parametrize("query", [
+        '''SELECT POWER({column1}, 2) FROM {table_name}'''
+        ])
+    def test_select_functions3(self, column1, query, connection, foreign_table, ref_table_populated, for_table_populated):
+        self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1))
 
 
     # ------------------------------ #
@@ -498,8 +523,8 @@ class TestFDW(MulticornBaseTest):
     # ---- Test text specific WHERE functions ---- #
     # -------------------------------------------- #
 
-    # TODO this needs more work/thought, but it's a starting point anyway...
-    # TODO probably should also be expanded to include some SIMILAR TO (proper regex) tests, but that's gonna be all kinds of problems
+    # Test out LIKE and ILIKE, I predict this section will be the source of many many problems...
+    # NOTE: anywhere there's a double %% it will be translated to a single % in the final SQL statement, due to python string formatting, so use your imagination
     @pytest.mark.parametrize("column1", [
         'string_a',
         'varchar_a',
@@ -507,22 +532,20 @@ class TestFDW(MulticornBaseTest):
         ])
     @pytest.mark.parametrize("regex", [
         "'%%'",
-        "'a%%'",
-        "'z%%'",
-        "'%%a'",
-        "'%%z'",
-        "'a_'",
-        "'z_'",
-        "'_a'",
-        "'_z'",
-        "'_a%%'",
-        "'_z%%'",
-        "'%%a_'",
-        "'%%z_'",
+        "'say%%'",
+        "'want%%'",
+        "'%%say'",
+        "'%%want'",
+        "'sa_'",
+        "'wan_'",
+        "'_ay'",
+        "'_ant'",
+        "'_ay%%'",
+        "'_ant%%'",
+        "'%%sa_'",
+        "'%%wan_'",
         "'_a_'",
-        "'_z_'",
-        "'_a_'",
-        "'_z_'"
+        "'_an_'"
         ])
     @pytest.mark.parametrize("query", [
         '''SELECT * FROM {table_name} WHERE {column1} LIKE {regex}''',
@@ -545,6 +568,53 @@ class TestFDW(MulticornBaseTest):
         #string_list = "('%s')" % "','".join([''.join(random.choice(string.lowercase) for i in range(3)) for x in xrange(20)])
         string_list = "('be look', 'or people', 'at also', 'and we', 'look well', 'people your', 'good like', 'even only', 'time into', 'also work')"
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, string_list=string_list))
+
+    # Test out SIMILAR TO
+    @pytest.mark.parametrize("column1", [
+        'string_a',
+        'varchar_a',
+        'char_a'
+        ])
+    @pytest.mark.parametrize("regex", [
+        "'%%'",
+        "'say'",
+        "'want'",
+        "'say%%'",
+        "'want%%'",
+        "'%%say'",
+        "'%%want'",
+        "'%%(say|want)%%'",
+        "'%%(say|want)'",
+        "'(say|want)%%'"
+        ])
+    @pytest.mark.parametrize("query", [
+        '''SELECT * FROM {table_name} WHERE {column1} SIMILAR TO {regex}'''
+        ])
+    def test_string_similar_to(self, column1, regex, query, connection, foreign_table, ref_table_populated, for_table_populated):
+        self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, regex=regex))
+
+    # And test out proper POSIX REGEX
+    @pytest.mark.parametrize("column1", [
+        'string_a',
+        'varchar_a',
+        'char_a'
+        ])
+    @pytest.mark.parametrize("regex", [ # This list should be enough to flag any big issues,but it's very basic and shoudl be expanded
+        "'say say'",
+        "'he want'",
+        "'say*'",
+        "'want*'",
+        "'^ay*'",
+        "'^ant*'",
+        "'^a*'",
+        "'^(say|want)*'",
+        "'(say|want)*'"
+        ])
+    @pytest.mark.parametrize("query", [
+        '''SELECT * FROM {table_name} WHERE {column1} ~ {regex}'''
+        ])
+    def test_string_regex(self, column1, regex, query, connection, foreign_table, ref_table_populated, for_table_populated):
+        self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, regex=regex))
 
 
     # --------------------------------------------------- #
@@ -660,7 +730,6 @@ class TestFDW(MulticornBaseTest):
     # --------------------------- #
 
     # First test some basic GROUP BY stuff
-    # TODO need to think move about the string col.  Maybe have some actual groups in it so this does something
     @pytest.mark.parametrize("column1", [ 
         'string_a',
         'varchar_a',
@@ -746,4 +815,37 @@ class TestFDW(MulticornBaseTest):
         '''SELECT {function}({column2}) FROM {table_name} GROUP BY {column1} HAVING COUNT({column1}) > 2'''
         ])
     def test_basic_group3(self, column1, function, column2, query, connection, foreign_table, ref_table_populated, for_table_populated):
+        self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, function=function, column2=column2))
+
+
+    # ---------------------------------- #
+    # ---- Test out WINDOW functions --- #
+    # ---------------------------------- #
+
+    # Test window functions, which are basically de-aggregated group bys
+    @pytest.mark.parametrize("column1", [
+        'string_a',
+        'varchar_a',
+        'char_a'
+        ])
+    @pytest.mark.parametrize("function", [
+        'COUNT',
+        'AVG',
+        'MAX',
+        'MIN',
+        'SUM'
+        ])
+    @pytest.mark.parametrize("column2", [
+        'tinyint_a',
+        'smallint_a',
+        'int_a',
+        'bigint_a',
+        'float_a',
+        'double_a',
+        'decimal_a'
+        ])
+    @pytest.mark.parametrize("query", [
+        '''SELECT *, {function}({column2}) OVER (PARTITION BY {column1}) FROM {table_name}'''
+        ])
+    def test_basic_window(self, column1, function, column2, query, connection, foreign_table, ref_table_populated, for_table_populated):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, function=function, column2=column2))
