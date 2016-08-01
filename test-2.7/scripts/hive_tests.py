@@ -133,7 +133,6 @@ class TestHiveFDW(TestFDW):
     def import_hive_data(self, for_table_columns):
 
         # create a temp csv in the right format for hive from test_data
-        # TODO break this out into a separate function, (same for the stuff above)
         noneValue = '<None>'
         booleanMap = { 't': 'TRUE', 'f': 'FALSE', '': 'NULL'}
         cols = for_table_columns.keys()
