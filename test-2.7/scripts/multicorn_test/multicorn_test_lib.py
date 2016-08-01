@@ -73,7 +73,7 @@ class MulticornBaseTest:
 
         define_cols = ", ".join(["%s %s" % (k,v) for k,v in table_columns.iteritems()])
         self.exec_sql(connection, '''CREATE TABLE {0} ( {1} );'''.format(self.ref_table_name(), define_cols))
-        # add table to metadata
+        # add table to metadata (this allows use of the insert api later on)
         ref_table = Table(self.ref_table_name(), metadata, autoload=True, autoload_with=db_engine)
 
         def fin():
@@ -178,7 +178,7 @@ class MulticornBaseTest:
 
     @pytest.fixture(scope='class')
     def foreign_table(self, request, connection, ref_table, foreign_server, password, fdw_options, table_columns):
-        """Fixture to create the foreign table we will test against"""
+        """Fixture to create the foreign table we will test against.  Defaults to pointing at the ref table via the PostgreSQL FDW"""
 
         print("Looking at fdw_options:%s" % (fdw_options))
         fdw_options_expanded = fdw_options.format(
@@ -210,8 +210,8 @@ class MulticornBaseTest:
     @pytest.fixture(scope="class")
     def for_table_populated(self, request, connection, ref_table):
         """
-            Fixture to populate the foreign table with data.  Should be overriden in child class.
-            The fixture should:
+            Fixture to populate the foreign table with data.  By default does nothing (for table points at ref table, which is already populated)
+            Should be overriden in child class. The fixture should:
               - connect to the external database
               - set up the test table (if necessary)
               - populate it with the same data as the ref table
@@ -232,6 +232,7 @@ class MulticornBaseTest:
 
     def exec_sql(self, connection, query):
 
+        # TODO there's still a connection leak issue, this code can be used to debug by greping output for 'mattout'
         #conn_count = connection.execute('SELECT sum(numbackends) FROM pg_stat_database;')
         #conn_count = conn_count.fetchall()
         #print 'mattout running query %s, %s connections' % (query,conn_count[0][0])
