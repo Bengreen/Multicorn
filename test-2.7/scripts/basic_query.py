@@ -26,6 +26,7 @@ class TestFDW(MulticornBaseTest):
     # Test data setup
     # --------------------------------------------------------------------------
 
+    # NOTE: Our test data includes two cols of each postgres type (to allow for inter column operations), plus tinyint to match the hive type
     @pytest.fixture(scope="class")
     def table_columns(self, request):
         cols = OrderedDict()
@@ -69,6 +70,8 @@ class TestFDW(MulticornBaseTest):
     # --------------------------------------------------------------------------
     # SQL Test Suite
     # --------------------------------------------------------------------------
+
+    # NOTE: currently the full SQL test suite tests only read functionality.  At some point if we want to support inserts we'll need to expand
 
     # ------------------------ #
     # --- Failing queries ---- #
