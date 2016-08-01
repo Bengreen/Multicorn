@@ -99,10 +99,12 @@ class TestHiveFDW(TestFDW):
 
         # convert schema dicts to SQL schema
         external_table_schema = ', '.join(['%s %s' % (k,v) for k,v in for_table_columns.iteritems()])
-        # hack to allow null boolean types in a hive view
-        view_schema = ", ".join(['cast (%s AS %s) AS %s' % (k,v,k) for k,v in for_table_columns.iteritems() if not 'boolean' in k])
+        # hack to allow null boolean and binary types in a hive view (should be documented for users)
+        view_schema = ", ".join(['cast (%s AS %s) AS %s' % (k,v,k) for k,v in for_table_columns.iteritems() if not any([t in k for t in ['boolean', 'binary']])])
         view_schema += ", CASE boolean_a WHEN 'TRUE' THEN TRUE WHEN 'FALSE' THEN FALSE ELSE NULL END AS boolean_a,"
-        view_schema += " CASE boolean_b WHEN 'TRUE' THEN TRUE WHEN 'FALSE' THEN FALSE ELSE NULL END AS boolean_b"
+        view_schema += " CASE boolean_b WHEN 'TRUE' THEN TRUE WHEN 'FALSE' THEN FALSE ELSE NULL END AS boolean_b,"
+        view_schema += " CASE binary_a WHEN '' THEN NULL ELSE binary_a END AS binary_a,"
+        view_schema += " CASE binary_b WHEN '' THEN NULL ELSE binary_b END AS binary_b"
 
         # set up external table and view in Hive
         with conn.cursor() as cur:
