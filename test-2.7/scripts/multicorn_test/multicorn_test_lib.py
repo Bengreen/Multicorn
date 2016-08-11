@@ -269,8 +269,27 @@ class MulticornBaseTest:
 
         assert return_ref.rowcount == return_for.rowcount, "Expecting ref and for to have same number of returning rows"
 
-        collection_ref = collections.Counter([tuple(myval.values()) for myval in return_ref.fetchall()])
-        collection_for = collections.Counter([tuple(myval.values()) for myval in return_for.fetchall()])
+#        collection_ref = collections.Counter([tuple(myval.values()) for myval in return_ref.fetchall()])
+#        collection_for = collections.Counter([tuple(myval.values()) for myval in return_for.fetchall()])
+
+        data_ref = return_ref.fetchall()
+        data_for = return_for.fetchall()
+
+        data_ref_processed = []
+        for rows_ref in data_ref:
+            items_ref_processed = []
+            for items_ref in rows_ref:
+                items_ref_processed.append (str (items_ref))
+            data_ref_processed.append (",".join (items_ref_processed))
+        data_for_processed = []
+        for rows_for in data_for:
+            items_for_processed = []
+            for items_for in rows_for:
+                items_for_processed.append (str (items_for))
+            data_for_processed.append (",".join (items_for_processed))
+
+        collection_ref = collections.Counter(data_ref_processed)
+        collection_for = collections.Counter(data_for_processed)
 
         print('Checking match of ref:%s == for:%s' % (collection_ref, collection_for))
         assert collection_ref == collection_for, 'Expecting results from both queries to be identical apart from order'
@@ -289,6 +308,27 @@ class MulticornBaseTest:
 
         assert return_ref.rowcount == return_for.rowcount, "Expecting ref and for to have same number of returning rows"
 
-        for (row_ref, row_for) in zip(return_ref.fetchall(), return_for.fetchall()):
+#        for (row_ref, row_for) in zip(return_ref.fetchall(), return_for.fetchall()):
+#            print('Checking match of ref:%s == for:%s' % (row_ref, row_for))
+#            assert row_ref == row_for, 'Rows should match %s == %s' % (row_ref, row_for)
+
+        data_ref = return_ref.fetchall()
+        data_for = return_for.fetchall()
+
+        data_ref_processed = []
+        for rows_ref in data_ref:
+            items_ref_processed = []
+            for items_ref in rows_ref:
+                items_ref_processed.append (str (items_ref))
+            data_ref_processed.append (",".join (items_ref_processed))
+        data_for_processed = []
+        for rows_for in data_for:
+            items_for_processed = []
+            for items_for in rows_for:
+                items_for_processed.append (str (items_for))
+            data_for_processed.append (",".join (items_for_processed))
+
+        for (row_ref, row_for) in zip(data_ref_processed, data_for_processed):
             print('Checking match of ref:%s == for:%s' % (row_ref, row_for))
             assert row_ref == row_for, 'Rows should match %s == %s' % (row_ref, row_for)
+
