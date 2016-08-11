@@ -76,6 +76,7 @@ class TestFDW(MulticornBaseTest):
     # ------------------------ #
     # --- Failing queries ---- #
     # ------------------------ #
+    @pytest.mark.verified_hive
     @pytest.mark.basic
     @pytest.mark.parametrize("query", [
         pytest.mark.xfail(reason="deliberate random ORDER")('''SELECT * from {table_name} order by RANDOM()''')
@@ -84,6 +85,7 @@ class TestFDW(MulticornBaseTest):
         #import pdb; pdb.set_trace()
         self.ordered_query(connection, query)
 
+    @pytest.mark.verified_hive
     @pytest.mark.basic
     @pytest.mark.parametrize("query", [
         pytest.mark.xfail(reason="deliberate random WHERE")('''SELECT * from {table_name} WHERE RANDOM() < 0.5'''),
@@ -92,6 +94,7 @@ class TestFDW(MulticornBaseTest):
     def test_failing_unordered(self, connection, query, foreign_table, ref_table_populated, for_table_populated):
         self.unordered_query(connection, query)
 
+    @pytest.mark.verified_hive
     @pytest.mark.basic
     @pytest.mark.parametrize("query", [
         pytest.mark.xfail(reason="deliberate overflow of a small int (2 bytes)")('''SELECT smallint_a * 1000000 from {table_name}'''),
@@ -104,6 +107,8 @@ class TestFDW(MulticornBaseTest):
     # ------------------------- #
     # ---- Very basic SQL  ---- #
     # ------------------------- #
+    @pytest.mark.totest
+    @pytest.mark.verified_hive
     @pytest.mark.basic
     @pytest.mark.parametrize("query", [
         '''SELECT * from {table_name}''',
@@ -118,6 +123,7 @@ class TestFDW(MulticornBaseTest):
     # ------------------------ #
     # --- Basic SELECT SQL --- #
     # ------------------------ #
+    @pytest.mark.verified_hive
     @pytest.mark.basic
     @pytest.mark.parametrize("column", [
         'tinyint_a',
@@ -143,6 +149,7 @@ class TestFDW(MulticornBaseTest):
     def test_select(self, column, query, connection, foreign_table, ref_table_populated, for_table_populated):
         self.unordered_query(connection, query.format(table_name='{table_name}', column=column))
 
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
         'smallint_a',
@@ -186,6 +193,7 @@ class TestFDW(MulticornBaseTest):
     # -------------------------------- #
     # ---- Test SELECT arithmetic ---- #
     # -------------------------------- #
+    @pytest.mark.verified_hive
     @pytest.mark.basic
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
@@ -217,6 +225,7 @@ class TestFDW(MulticornBaseTest):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, column2=column2, operator=operator))
 
     # Test multiply against specified constants (to avoid overflow issues)
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
         'smallint_a',
@@ -243,6 +252,7 @@ class TestFDW(MulticornBaseTest):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, column2=column2, operator=operator))
 
     # Test divide against specified constants (to avoid div by zero issues)
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
         'smallint_a',
@@ -271,6 +281,7 @@ class TestFDW(MulticornBaseTest):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, column2=column2, operator=operator))
 
     # Test exponentiation with only positive ints to avoid complex numbers and that whole mess
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
         'smallint_a',
@@ -297,6 +308,7 @@ class TestFDW(MulticornBaseTest):
     # ---- Test SELECT functions ---- #
     # ------------------------------- #
     # test out some functions on columns, check they're working ok
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
         'smallint_a',
@@ -320,6 +332,7 @@ class TestFDW(MulticornBaseTest):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, function=function))
 
     # Test DIV and POWER on ints
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
         'smallint_a',
@@ -334,6 +347,7 @@ class TestFDW(MulticornBaseTest):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1))
 
     # And test POWER on floats
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [
         'float_a',
         'double_a',
@@ -351,6 +365,7 @@ class TestFDW(MulticornBaseTest):
     # ------------------------------ #
 
     # First for numerical types
+    @pytest.mark.verified_hive
     @pytest.mark.basic
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
@@ -392,6 +407,7 @@ class TestFDW(MulticornBaseTest):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, operator=operator, column2=column2))
 
     # Then for time types
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [
         'date_a',
         'timestamp_a'
@@ -419,6 +435,7 @@ class TestFDW(MulticornBaseTest):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, operator=operator, column2=column2))
 
     # Then for string types
+    @pytest.mark.verified_hive
     @pytest.mark.basic
     @pytest.mark.parametrize("column1", [
         'string_a',
@@ -447,6 +464,7 @@ class TestFDW(MulticornBaseTest):
     # ---- Test WHERE logical operators ---- #
     # -------------------------------------- #
 
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
         'smallint_a',
@@ -482,6 +500,7 @@ class TestFDW(MulticornBaseTest):
     # ------------------------------ #
 
     # Test out a few functions in the where clause (only on numerical types)
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
         'smallint_a',
@@ -518,7 +537,7 @@ class TestFDW(MulticornBaseTest):
     @pytest.mark.parametrize("query", [
         '''SELECT * FROM {table_name} WHERE {function}({column1}) {operator} {column2}'''
         ])
-    def test_where_logical_operators(self, column1, function, operator, column2, query, connection, foreign_table, ref_table_populated, for_table_populated):
+    def test_where_functions(self, column1, function, operator, column2, query, connection, foreign_table, ref_table_populated, for_table_populated):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, function=function, operator=operator, column2=column2))
 
 
@@ -528,6 +547,7 @@ class TestFDW(MulticornBaseTest):
 
     # Test out LIKE and ILIKE, I predict this section will be the source of many many problems...
     # NOTE: anywhere there's a double %% it will be translated to a single % in the final SQL statement, due to python string formatting, so use your imagination
+    @pytest.mark.failed_hive
     @pytest.mark.parametrize("column1", [
         'string_a',
         'varchar_a',
@@ -535,20 +555,22 @@ class TestFDW(MulticornBaseTest):
         ])
     @pytest.mark.parametrize("regex", [
         "'%%'",
-        "'say%%'",
-        "'want%%'",
-        "'%%say'",
-        "'%%want'",
-        "'sa_'",
-        "'wan_'",
-        "'_ay'",
-        "'_ant'",
-        "'_ay%%'",
-        "'_ant%%'",
-        "'%%sa_'",
-        "'%%wan_'",
-        "'_a_'",
-        "'_an_'"
+        "'it%%'",
+        "'of%%'",
+        "'%%age'",
+        "'%%times'",
+        "'it wa_'",
+        "'of time_'",
+        "'_t was'",
+        "'_est of times'",
+        "'_t%%'",
+        "'_f%%'",
+        "'%%th_'",
+        "'%%time_'",
+        "'%%of%%'",
+        "'%%the%%'",
+        "'_t wa_'",
+        "'_f time_'"
         ])
     @pytest.mark.parametrize("query", [
         '''SELECT * FROM {table_name} WHERE {column1} LIKE {regex}''',
@@ -558,21 +580,26 @@ class TestFDW(MulticornBaseTest):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, regex=regex))
 
     # Test out the IN operator
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [
         'string_a',
         'varchar_a',
         'char_a'
         ])
+    @pytest.mark.parametrize("string_list", [
+        "(NULL, 'best of times', 'it was the worst', 'of wisdom', 'it was', 'of belief')",
+        "('', 'It was the', 'of times', 'it was the age', 'the age of foolishness', 'it was the epoch')",
+        "('none', 'of', 'the above')"
+        ])
     @pytest.mark.parametrize("query", [
         '''SELECT * FROM {table_name} WHERE {column1} IN {string_list}''',
         '''SELECT * FROM {table_name} WHERE NOT {column1} IN {string_list}'''
         ])
-    def test_string_in(self, column1, query, connection, foreign_table, ref_table_populated, for_table_populated):
-        #string_list = "('%s')" % "','".join([''.join(random.choice(string.lowercase) for i in range(3)) for x in xrange(20)])
-        string_list = "('be look', 'or people', 'at also', 'and we', 'look well', 'people your', 'good like', 'even only', 'time into', 'also work')"
+    def test_string_in(self, column1, string_list, query, connection, foreign_table, ref_table_populated, for_table_populated):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, string_list=string_list))
 
     # Test out SIMILAR TO
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [
         'string_a',
         'varchar_a',
@@ -580,15 +607,15 @@ class TestFDW(MulticornBaseTest):
         ])
     @pytest.mark.parametrize("regex", [
         "'%%'",
-        "'say'",
-        "'want'",
-        "'say%%'",
-        "'want%%'",
-        "'%%say'",
-        "'%%want'",
-        "'%%(say|want)%%'",
-        "'%%(say|want)'",
-        "'(say|want)%%'"
+        "'it'",
+        "'best'",
+        "'it%%'",
+        "'best%%'",
+        "'%%the'",
+        "'%%times'",
+        "'%%(was|of)%%'",
+        "'%%(the|times)'",
+        "'(it|best)%%'"
         ])
     @pytest.mark.parametrize("query", [
         '''SELECT * FROM {table_name} WHERE {column1} SIMILAR TO {regex}'''
@@ -597,21 +624,22 @@ class TestFDW(MulticornBaseTest):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, regex=regex))
 
     # And test out proper POSIX REGEX
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [
         'string_a',
         'varchar_a',
         'char_a'
         ])
     @pytest.mark.parametrize("regex", [ # This list should be enough to flag any big issues,but it's very basic and shoudl be expanded
-        "'say say'",
-        "'he want'",
-        "'say*'",
-        "'want*'",
-        "'^ay*'",
-        "'^ant*'",
-        "'^a*'",
-        "'^(say|want)*'",
-        "'(say|want)*'"
+        "'it was'",
+        "'of times'",
+        "'it'",
+        "'the'",
+        "'^it*'",
+        "'^times'",
+        "'^the'",
+        "'^(it|of)'",
+        "'(it|of)*'"
         ])
     @pytest.mark.parametrize("query", [
         '''SELECT * FROM {table_name} WHERE {column1} ~ {regex}'''
@@ -663,6 +691,7 @@ class TestFDW(MulticornBaseTest):
     # ----------------------- #
 
     # test out all the basic sort on one column stuff
+    @pytest.mark.failed_hive
     @pytest.mark.basic
     @pytest.mark.parametrize("column1", [
         'smallint_a',
@@ -678,14 +707,14 @@ class TestFDW(MulticornBaseTest):
         'char_a'
         ])
     @pytest.mark.parametrize("query", [
-        '''SELECT * FROM {table_name} ORDER BY 1''',
-        '''SELECT * FROM {table_name} ORDER BY {column1}''',
-        '''SELECT * FROM {table_name} ORDER BY {column1} LIMIT 10 OFFSET 10''',
-        '''SELECT * FROM {table_name} ORDER BY {column1} NULLS FIRST''',
-        '''SELECT * FROM {table_name} ORDER BY {column1} NULLS LAST''',
-        '''SELECT * FROM {table_name} ORDER BY {column1} DESC''',
-        '''SELECT * FROM {table_name} ORDER BY {column1} DESC NULLS FIRST''',
-        '''SELECT * FROM {table_name} ORDER BY {column1} DESC NULLS LAST'''
+        '''SELECT {column1} FROM {table_name} ORDER BY 1''',
+        '''SELECT {column1} FROM {table_name} ORDER BY {column1}''',
+        '''SELECT {column1} FROM {table_name} ORDER BY {column1} LIMIT 10 OFFSET 10''',
+        '''SELECT {column1} FROM {table_name} ORDER BY {column1} NULLS FIRST''',
+        '''SELECT {column1} FROM {table_name} ORDER BY {column1} NULLS LAST''',
+        '''SELECT {column1} FROM {table_name} ORDER BY {column1} DESC''',
+        '''SELECT {column1} FROM {table_name} ORDER BY {column1} DESC NULLS FIRST''',
+        '''SELECT {column1} FROM {table_name} ORDER BY {column1} DESC NULLS LAST'''
         ])
     def test_sort(self, column1, query, connection, foreign_table, ref_table_populated, for_table_populated):
         self.ordered_query(connection, query.format(table_name='{table_name}', column1=column1))
@@ -722,7 +751,7 @@ class TestFDW(MulticornBaseTest):
         'boolean_b'
         ])
     @pytest.mark.parametrize("query", [
-        '''SELECT * FROM {table_name} ORDER BY {column1}, {column2} '''
+        '''SELECT {column1}, {column2} FROM {table_name} ORDER BY {column1}, {column2} '''
         ])
     def test_compound_sort(self, column1, column2, query, connection, foreign_table, ref_table_populated, for_table_populated):
         self.ordered_query(connection, query.format(table_name='{table_name}', column1=column1, column2=column2))
