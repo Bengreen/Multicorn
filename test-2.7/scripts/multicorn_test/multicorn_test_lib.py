@@ -1,6 +1,8 @@
+import warnings
 import pytest
 import collections
 import csv
+from operator import itemgetter
 from sqlalchemy.sql import text
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
@@ -255,6 +257,20 @@ class MulticornBaseTest:
         assert returnVal.returns_rows, "Expecting rows"
         return (returnVal.keys(), returnVal.fetchall())
 
+    # isclose is a built in function for python 3
+    @staticmethod
+    def isclose_double (a, b, rel_tol=1e-09, abs_tol=0.0):
+        difference = abs (a-b)
+        tolerance  = max (rel_tol * max (abs (a), abs (b)), abs_tol)
+        return (difference <= tolerance, difference, tolerance)
+
+    # isclose is a built in function for python 3
+    @staticmethod
+    def isclose_float (a, b, rel_tol=1e-05, abs_tol=0.0):
+        difference = abs (a-b)
+        tolerance  = max (rel_tol * max (abs (a), abs (b)), abs_tol)
+        return (difference <= tolerance, difference, tolerance)
+
     def unordered_query(self, connection, query):
         query_ref = query.format(table_name=self.ref_table_name())
         query_for = query.format(table_name=self.for_table_name())
@@ -262,37 +278,73 @@ class MulticornBaseTest:
         return_ref = self.exec_sql(connection, query_ref)
         return_for = self.exec_sql(connection, query_for)
 
+        # failure when one query returns rows and one does not return rows
         assert return_ref.returns_rows == return_for.returns_rows, "Expecting ref and for to have matching returns_rows"
 
-        if not return_ref.returns_rows:
+        # success if no rows to process
+        if not return_ref.returns_rows and not return_for.returns_rows:
             return
 
+        # failure if number of rows does not match 
         assert return_ref.rowcount == return_for.rowcount, "Expecting ref and for to have same number of returning rows"
 
-#        collection_ref = collections.Counter([tuple(myval.values()) for myval in return_ref.fetchall()])
-#        collection_for = collections.Counter([tuple(myval.values()) for myval in return_for.fetchall()])
+        # failure if columns do not match
+        assert collections.Counter (return_ref.keys ()) == collections.Counter (return_for.keys ()), "Expecting ref and for to have the same returning columns"
+        keys_all = return_ref.keys () 
 
-        data_ref = return_ref.fetchall()
-        data_for = return_for.fetchall()
+        # convert data to lists of dictionaries
+        data_ref = return_ref.fetchall ()
+        data_for = return_for.fetchall ()
+        print ('Checking match of ref:%s == for:%s' % (data_ref, data_for))
 
-        data_ref_processed = []
+        data_ref_unsorted = []
         for rows_ref in data_ref:
-            items_ref_processed = []
-            for items_ref in rows_ref:
-                items_ref_processed.append (str (items_ref))
-            data_ref_processed.append (",".join (items_ref_processed))
-        data_for_processed = []
+            items_ref = dict (rows_ref.items ())
+            data_ref_unsorted.append (items_ref)
+        data_for_unsorted = []
         for rows_for in data_for:
+            items_for = dict (rows_for.items ())
+            data_for_unsorted.append (items_for)
+
+        # test for data with an id column
+        if u"id" in return_ref.keys () and u"id" in return_for.keys ():
+            # sort the list of dictionaries by 'id' column
+            data_ref_sorted = sorted (data_ref_unsorted, key=itemgetter ('id'))
+            data_for_sorted = sorted (data_for_unsorted, key=itemgetter ('id'))
+            for rows_ref,rows_for in zip (data_ref_sorted, data_for_sorted):
+                items_ref = dict (rows_ref.items ())
+                items_for = dict (rows_for.items ())
+                for key in keys_all:
+                    # float comparison
+                    if isinstance (items_ref[key], float):
+                        # if not identical, check for close result
+                        if items_ref[key] != items_for[key]:
+                            __result,__difference,__tolerance = MulticornBaseTest.isclose_float (items_ref[key], items_for[key])
+                            assert __result, "Expecting results from both queries to be within tolerance apart from order (%s) ... ref[%s] (almost)== for[%s]: %s (almost)== %s ... difference: %s, tolerance: %s" \
+                                    % (type (items_ref[key]), key, key, items_ref[key], items_for[key], __difference, __tolerance)
+                            # close result, issue warning
+                            with pytest.warns (UserWarning):
+                                warnings.warn ("Expected results not identical but within tolerance (%s) ... ref[%s] (almost)== for[%s]: %s (almost)== %s ... difference: %s, tolerance %s" \
+                                        % (type (items_ref[key]), key, key, items_ref[key], items_for[key], __difference, __tolerance), UserWarning)
+                    # all other type comparisons
+                    else:
+                        assert str (items_ref[key]) == str (items_for[key]), "Expecting results from both queries to be identical apart from order (%s) ... ref[%s] == for[%s]: %s == %s" \
+                                % (type (items_ref[key]), key, key, items_ref[key], items_for[key])
+            return
+
+        # test for data without an id column
+        # convert all data types to strings for equality comparison
+        data_ref_processed = []
+        data_for_processed = []
+        for rows_ref,rows_for in zip (data_ref_unsorted, data_for_unsorted):
+            items_ref_processed = []
             items_for_processed = []
-            for items_for in rows_for:
-                items_for_processed.append (str (items_for))
+            for key in keys_all:
+                items_ref_processed.append (str (rows_ref[key]))
+                items_for_processed.append (str (rows_for[key]))
+            data_ref_processed.append (",".join (items_ref_processed))
             data_for_processed.append (",".join (items_for_processed))
-
-        collection_ref = collections.Counter(data_ref_processed)
-        collection_for = collections.Counter(data_for_processed)
-
-        print('Checking match of ref:%s == for:%s' % (collection_ref, collection_for))
-        assert collection_ref == collection_for, 'Expecting results from both queries to be identical apart from order'
+        assert collections.Counter(data_ref_processed) == collections.Counter(data_for_processed), 'Expecting results from both queries to be identical apart from order'
 
     def ordered_query(self, connection, query):
         query_ref = query.format(table_name=self.ref_table_name())
@@ -301,34 +353,47 @@ class MulticornBaseTest:
         return_ref = self.exec_sql(connection, query_ref)
         return_for = self.exec_sql(connection, query_for)
 
+        # failure when one query returns rows and one does not return rows
         assert return_ref.returns_rows == return_for.returns_rows, "Expecting ref and for to have matching returns_rows"
 
-        if not return_ref.returns_rows:
+        # success if no rows to process
+        if not return_ref.returns_rows and not return_for.returns_rows:
             return
 
+        # failure if number of rows does not match 
         assert return_ref.rowcount == return_for.rowcount, "Expecting ref and for to have same number of returning rows"
 
-#        for (row_ref, row_for) in zip(return_ref.fetchall(), return_for.fetchall()):
-#            print('Checking match of ref:%s == for:%s' % (row_ref, row_for))
-#            assert row_ref == row_for, 'Rows should match %s == %s' % (row_ref, row_for)
+        # failure if columns do not match
+        assert collections.Counter (return_ref.keys ()) == collections.Counter (return_for.keys ()), "Expecting ref and for to have the same returning columns"
+        keys_all = return_ref.keys ()
 
-        data_ref = return_ref.fetchall()
-        data_for = return_for.fetchall()
+        # convert data to lists of dictionaries
+        data_ref = return_ref.fetchall ()
+        data_for = return_for.fetchall ()
+        print ('Checking match of ref:%s == for:%s' % (data_ref, data_for))
 
-        data_ref_processed = []
+        data_ref_unsorted = []
         for rows_ref in data_ref:
-            items_ref_processed = []
-            for items_ref in rows_ref:
-                items_ref_processed.append (str (items_ref))
-            data_ref_processed.append (",".join (items_ref_processed))
-        data_for_processed = []
+            items_ref = dict (rows_ref.items ())
+            data_ref_unsorted.append (items_ref)
+        data_for_unsorted = []
         for rows_for in data_for:
+            items_for = dict (rows_for.items ())
+            data_for_unsorted.append (items_for)
+
+        # convert all data types to strings for equality comparison
+        data_ref_processed = []
+        data_for_processed = []
+        for rows_ref,rows_for in zip (data_ref_unsorted, data_for_unsorted):
+            items_ref_processed = []
             items_for_processed = []
-            for items_for in rows_for:
-                items_for_processed.append (str (items_for))
+            for key in keys_all:
+                items_ref_processed.append (str (rows_ref[key]))
+                items_for_processed.append (str (rows_for[key]))
+            data_ref_processed.append (",".join (items_ref_processed))
             data_for_processed.append (",".join (items_for_processed))
 
-        for (row_ref, row_for) in zip(data_ref_processed, data_for_processed):
-            print('Checking match of ref:%s == for:%s' % (row_ref, row_for))
+        for (row_ref, row_for) in zip (data_ref_processed, data_for_processed):
+            print ('Checking match of ref:%s == for:%s' % (row_ref, row_for))
             assert row_ref == row_for, 'Rows should match %s == %s' % (row_ref, row_for)
 

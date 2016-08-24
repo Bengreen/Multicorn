@@ -22,7 +22,6 @@ class TestHiveFDW(TestFDW):
     @pytest.fixture(scope='module')
     def fdw_options(request):
         """ List of options for the Hive FDW """
-#        return "host 'localhost', port '10000', authmechanism 'PLAIN', user 'demo', password '', database 'default', table '{for_table_name}'"
         return "host 'localhost', port '10000', authmechanism 'PLAIN', user 'hdfs', password '', database 'default', table '{for_table_name}'"
 
 
@@ -54,6 +53,7 @@ class TestHiveFDW(TestFDW):
         """ Schema for the test data in Hive """
         cols = OrderedDict()
 
+        cols['id'] = 'INT'
         cols['tinyint_a'] = 'TINYINT'
         cols['tinyint_b'] = 'TINYINT'
         cols['smallint_a'] = 'SMALLINT'
@@ -90,13 +90,6 @@ class TestHiveFDW(TestFDW):
 
         # TODO again this should probably be parameterized
         # connect to Hive
-#        conn = pyhs2.connect(
-#            host='127.0.0.1',
-#            port = 10000,
-#            authMechanism='PLAIN',
-#            user='demo',
-#            password='',
-#            database='default')
         conn = pyhs2.connect(
             host='127.0.0.1',
             port = 10000,
@@ -108,12 +101,8 @@ class TestHiveFDW(TestFDW):
         # convert schema dicts to SQL schema
         external_table_schema = ', '.join(['%s %s' % (k,v) for k,v in for_table_columns.iteritems()])
         # hack to allow null boolean and binary types in a hive view (should be documented for users)
-#        view_schema = ", ".join(['cast (%s AS %s) AS %s' % (k,v,k) for k,v in for_table_columns.iteritems() if not any([t in k for t in ['boolean', 'binary']])])
-#        view_schema += ", CASE boolean_a WHEN 'TRUE' THEN TRUE WHEN 'FALSE' THEN FALSE ELSE NULL END AS boolean_a,"
-#        view_schema += " CASE boolean_b WHEN 'TRUE' THEN TRUE WHEN 'FALSE' THEN FALSE ELSE NULL END AS boolean_b,"
-#        view_schema += " CASE binary_a WHEN '' THEN NULL ELSE binary_a END AS binary_a,"
-#        view_schema += " CASE binary_b WHEN '' THEN NULL ELSE binary_b END AS binary_b"
-        view_schema = """cast (tinyint_a AS TINYINT)        AS tinyint_a,
+        view_schema = """cast (id AS INT)                   AS id,
+cast (tinyint_a AS TINYINT)        AS tinyint_a,
 cast (tinyint_b AS TINYINT)        AS tinyint_b,
 cast (smallint_a AS SMALLINT)      AS smallint_a,
 cast (smallint_b AS SMALLINT)      AS smallint_b,
@@ -145,17 +134,6 @@ cast (CASE binary_b WHEN '<None>' THEN NULL ELSE binary_b END AS BINARY) AS bina
         # set up external table and view in Hive
         with conn.cursor() as cur:
             cur.execute('DROP TABLE IF EXISTS query_for_ext')
-#            cur.execute("""
-#                CREATE EXTERNAL TABLE IF NOT EXISTS query_for_ext (
-#                %s
-#                )
-#                    ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
-#                    WITH SERDEPROPERTIES ("separatorChar"=",", "quoteChar"="\\"", "escapeChar"="\\\\")
-#                    STORED AS TEXTFILE
-#                    LOCATION '/udvtest'
-#                    TBLPROPERTIES ("skip.header.line.count"="1")
-#                """ % (external_table_schema)
-#            )
             cur.execute("""
                 CREATE EXTERNAL TABLE IF NOT EXISTS query_for_ext (
                 %s
@@ -189,14 +167,7 @@ cast (CASE binary_b WHEN '<None>' THEN NULL ELSE binary_b END AS BINARY) AS bina
                 csvwriter = csv.writer(hivefile)
                 csvwriter.writerow(cols)
                 for row in csvreader:
-#                    actualRow = {k: v.replace('<None>', '') for k,v in row.iteritems()}
-#                    actualRow['boolean_a'] = booleanMap[actualRow['boolean_a']]
-#                    actualRow['boolean_b'] = booleanMap[actualRow['boolean_b']]
-#                    actualRow['binary_a'] = binascii.unhexlify(actualRow['binary_a'][2:])
-#                    actualRow['binary_b'] = binascii.unhexlify(actualRow['binary_b'][2:])
                     actualRow = {k: v.replace('<None>', '<None>') for k,v in row.iteritems()}
-#                    actualRow['binary_a'] = binascii.unhexlify(actualRow['binary_a'][2:]) if actualRow['binary_a'] != '<None>' else '<None>'
-#                    actualRow['binary_b'] = binascii.unhexlify(actualRow['binary_b'][2:]) if actualRow['binary_b'] != '<None>' else '<None>'
                     csvwriter.writerow([actualRow[x] for x in cols])
 
         # add test_data to hdfs

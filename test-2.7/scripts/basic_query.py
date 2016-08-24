@@ -31,6 +31,7 @@ class TestFDW(MulticornBaseTest):
     def table_columns(self, request):
         cols = OrderedDict()
 
+        cols['id'] = 'INTEGER'
         cols['tinyint_a'] = 'SMALLINT'
         cols['tinyint_b'] = 'SMALLINT'
         cols['smallint_a'] = 'SMALLINT'
@@ -107,12 +108,11 @@ class TestFDW(MulticornBaseTest):
     # ------------------------- #
     # ---- Very basic SQL  ---- #
     # ------------------------- #
-    @pytest.mark.totest
     @pytest.mark.verified_hive
     @pytest.mark.basic
     @pytest.mark.parametrize("query", [
         '''SELECT * from {table_name}''',
-        '''SELECT 1, * from {table_name} ''',
+        '''SELECT 1, 2, * from {table_name} ''',
         '''SELECT 'abs' AS text_col, * FROM {table_name}''',
         '''SELECT COUNT(*) FROM {table_name}'''
         ])
@@ -545,7 +545,40 @@ class TestFDW(MulticornBaseTest):
     # ---- Test text specific WHERE functions ---- #
     # -------------------------------------------- #
 
-    # Test out LIKE and ILIKE, I predict this section will be the source of many many problems...
+    # Test out LIKE
+    # NOTE: anywhere there's a double %% it will be translated to a single % in the final SQL statement, due to python string formatting, so use your imagination
+    @pytest.mark.verified_hive
+    @pytest.mark.parametrize("column1", [
+        'string_a',
+        'varchar_a',
+        'char_a'
+        ])
+    @pytest.mark.parametrize("regex", [
+        "'%%'",
+        "'it%%'",
+        "'of%%'",
+        "'%%age'",
+        "'%%times'",
+        "'it wa_'",
+        "'of time_'",
+        "'_t was'",
+        "'_est of times'",
+        "'_t%%'",
+        "'_f%%'",
+        "'%%th_'",
+        "'%%time_'",
+        "'%%of%%'",
+        "'%%the%%'",
+        "'_t wa_'",
+        "'_f time_'"
+        ])
+    @pytest.mark.parametrize("query", [
+        '''SELECT * FROM {table_name} WHERE {column1} LIKE {regex}''',
+        ])
+    def test_string_like(self, column1, regex, query, connection, foreign_table, ref_table_populated, for_table_populated):
+        self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, regex=regex))
+
+    # Test out ILIKE
     # NOTE: anywhere there's a double %% it will be translated to a single % in the final SQL statement, due to python string formatting, so use your imagination
     @pytest.mark.failed_hive
     @pytest.mark.parametrize("column1", [
@@ -573,10 +606,9 @@ class TestFDW(MulticornBaseTest):
         "'_f time_'"
         ])
     @pytest.mark.parametrize("query", [
-        '''SELECT * FROM {table_name} WHERE {column1} LIKE {regex}''',
         '''SELECT * FROM {table_name} WHERE {column1} ILIKE {regex}'''
         ])
-    def test_string_like(self, column1, regex, query, connection, foreign_table, ref_table_populated, for_table_populated):
+    def test_string_ilike(self, column1, regex, query, connection, foreign_table, ref_table_populated, for_table_populated):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, regex=regex))
 
     # Test out the IN operator
@@ -596,6 +628,10 @@ class TestFDW(MulticornBaseTest):
         '''SELECT * FROM {table_name} WHERE NOT {column1} IN {string_list}'''
         ])
     def test_string_in(self, column1, string_list, query, connection, foreign_table, ref_table_populated, for_table_populated):
+        #string_list = "('%s')" % "','".join([''.join(random.choice(string.lowercase) for i in range(3)) for x in xrange(20)])
+        #string_list = "('be look', 'or people', 'at also', 'and we', 'look well', 'people your', 'good like', 'even only', 'time into', 'also work')"
+        #string_list = "(NULL, '', 'It was the', 'best of times', 'it was the worst', 'of times', 'it was the age', 'of wisdom', 'it was', 'the age of foolishness', 'it was the epoch', 'of belief')"
+
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, string_list=string_list))
 
     # Test out SIMILAR TO
@@ -653,6 +689,7 @@ class TestFDW(MulticornBaseTest):
     # --------------------------------------------------- #
 
     # First predicate subqueries, then scalar subqueries, only with numerical types
+    @pytest.mark.bug_hive
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
         'smallint_a',
@@ -691,6 +728,7 @@ class TestFDW(MulticornBaseTest):
     # ----------------------- #
 
     # test out all the basic sort on one column stuff
+    # NOTE : order by works for most types, however string types in hive use a different ordering method than postgresql
     @pytest.mark.failed_hive
     @pytest.mark.basic
     @pytest.mark.parametrize("column1", [
@@ -720,6 +758,8 @@ class TestFDW(MulticornBaseTest):
         self.ordered_query(connection, query.format(table_name='{table_name}', column1=column1))
 
     # test out compound sorts
+    @pytest.mark.failed_hive
+    # NOTE : order by works for most types, however string types in hive use a different ordering method than postgresql
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
         'smallint_a',
@@ -762,6 +802,7 @@ class TestFDW(MulticornBaseTest):
     # --------------------------- #
 
     # First test some basic GROUP BY stuff
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [ 
         'string_a',
         'varchar_a',
@@ -784,13 +825,14 @@ class TestFDW(MulticornBaseTest):
         'decimal_a'
         ])
     @pytest.mark.parametrize("query", [
-        '''SELECT {column1}, {function}({column2}) FROM {table_name} GROUP BY {column1}''',
-        '''SELECT {column1}, {function}(DISTINCT {column2}) FROM {table_name} GROUP BY {column1}'''
+        '''SELECT {column1}, MIN (id) AS id, {function}({column2}) FROM {table_name} GROUP BY {column1}''',
+        '''SELECT {column1}, MIN (id) AS id, {function}(DISTINCT {column2}) FROM {table_name} GROUP BY {column1}'''
         ])
     def test_basic_group1(self, column1, function, column2, query, connection, foreign_table, ref_table_populated, for_table_populated):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, function=function, column2=column2))
 
     # Try grouping by sign of a numerical col instead of strings.  Also test dates
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [
         'tinyint_a',
         'smallint_a',
@@ -822,6 +864,7 @@ class TestFDW(MulticornBaseTest):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, function=function, column2=column2))
 
     # Test out the HAVING clause
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [
         'string_a',
         'varchar_a',
@@ -844,9 +887,10 @@ class TestFDW(MulticornBaseTest):
         'decimal_a'
         ])
     @pytest.mark.parametrize("query", [
-        '''SELECT {function}({column2}) FROM {table_name} GROUP BY {column1} HAVING COUNT({column1}) > 2'''
+        '''SELECT MIN(id) AS id, {function}({column2}) FROM {table_name} GROUP BY {column1} HAVING COUNT({column1}) > 2''',
+        '''SELECT MIN(id) AS id, {function}({column2}) FROM {table_name} GROUP BY {column1} HAVING COUNT({column1}) >= 10'''
         ])
-    def test_basic_group3(self, column1, function, column2, query, connection, foreign_table, ref_table_populated, for_table_populated):
+    def test_basic_group3_exact(self, column1, function, column2, query, connection, foreign_table, ref_table_populated, for_table_populated):
         self.unordered_query(connection, query.format(table_name='{table_name}', column1=column1, function=function, column2=column2))
 
 
@@ -855,6 +899,7 @@ class TestFDW(MulticornBaseTest):
     # ---------------------------------- #
 
     # Test window functions, which are basically de-aggregated group bys
+    @pytest.mark.verified_hive
     @pytest.mark.parametrize("column1", [
         'string_a',
         'varchar_a',
